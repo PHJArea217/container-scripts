@@ -33,12 +33,14 @@ subprocess.run(["ip", "route", "add", "0.0.0.0/0", "via", "192.168.1.1"], check=
 subprocess.run(["mount", "-ttmpfs", "-omode=0755", "none", "/proc/driver"], check=True)
 
 os.chdir("/proc/driver")
+os.mkdir("dev")
 container_lib.make_devfs()
+os.chmod("dev/pts/ptmx", 0o666)
 
-for my_dir in ["etc", "home", "oldroot", "proc", "run", "sys", "usr", "var"]
+for my_dir in ["etc", "home", "oldroot", "proc", "run", "sys", "usr", "var"]:
     os.mkdir(my_dir)
 
-for my_dir in ["tmp", "run/shm", "run/lock"]
+for my_dir in ["tmp", "run/shm", "run/lock"]:
     os.mkdir(my_dir)
     os.chmod(my_dir, 0o1777)
 

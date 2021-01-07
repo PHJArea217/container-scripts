@@ -18,11 +18,11 @@ def write_full(fd, data):
 
 def setup_userns_netns(uid_map, gid_map, owner_uid=None, deny_setgroups=False):
     if type(owner_uid) is int:
-        unshare_args = ["/usr/bin/setpriv", "--reuid=" + str(owner_uid), "/usr/bin/unshare", "-U", "-n", "/bin/sh", "-c", "echo && sleep 5"]
+        unshare_args = ["/usr/bin/setpriv", "--reuid=" + str(owner_uid), "/usr/bin/unshare", "-U", "-n", "/bin/sh", "-c", "echo && cat"]
     else:
         unshare_args = ["/usr/bin/unshare", "-U", "-n", "/bin/sh", "-c", "echo && sleep 5"]
 
-    unshare_process = subprocess.Popen(unshare_args, stdout=subprocess.PIPE)
+    unshare_process = subprocess.Popen(unshare_args, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
     proc_dir = os.open("/proc/" + str(unshare_process.pid), os.O_RDONLY | os.O_DIRECTORY)
     if unshare_process.stdout.read(1) == b"\n":
         pass
@@ -49,6 +49,7 @@ def setup_userns_netns(uid_map, gid_map, owner_uid=None, deny_setgroups=False):
 
     userns_fd = os.open("ns/user", os.O_RDONLY, dir_fd=proc_dir)
     netns_fd = os.open("ns/net", os.O_RDONLY, dir_fd=proc_dir)
+    unshare_process.communicate(input=b'', timeout=15)
     unshare_process.terminate()
     unshare_process.wait()
     os.close(proc_dir)
