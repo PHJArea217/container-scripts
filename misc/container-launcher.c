@@ -190,7 +190,7 @@ const char *child_func(struct child_data *data) {
 		if (chdir(data->pivot_root_dir)) return "cd pivot_root_dir";
 		/* EVERYTHING BELOW HERE IS ASSUMED TO BE EXTREMELY DANGEROUS SINCE THE ROOT FS HAS CHANGED */
 		/* AND A MALICIOUS CONTAINER ROOTFS COULD ALLOW ACCESS TO THE HOST'S ROOT FS */
-		/* (ref: Docker libnss security flaw) */
+		/* (ref: https://nvd.nist.gov/vuln/detail/CVE-2019-14271) */
 		if (syscall(SYS_pivot_root, ".", ".")) return "!pivot_root";
 	}
 	/* step 10: mount /proc */
