@@ -15,6 +15,8 @@ echo 0 1000 1 > /proc/self/fd/"$2"/uid_map
 ip link add veth_container type veth peer name eth0 netns /proc/self/fd/"$2"/ns/net
 ip link set veth_container master br0 up
 
+# Can use nsenter to "peek into" the container, in order to perform operations
+# within its namespaces
 nsenter --user=/proc/self/fd/"$2"/ns/user --net=/proc/self/fd/"$2"/ns/net --mount=/proc/self/fd/"$2"/ns/mnt -S 0 -G 0 <<\EOF
 set -eu
 ip link set lo up
