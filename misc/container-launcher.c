@@ -462,12 +462,13 @@ invalid_propagation:
 						"-f n   don't do normal routine; instead, enter user namespace on fd n\n"
 						"-fi    don't do normal routine; instead, like -f n but without setns\n"
 						"-B n   set securebits\n"
-						"-O n   set owner uid\n"
+						"-O n   set owner uid (i.e. the forked process will have this effective UID\n"
+						"       relative to the current userns)\n"
 						"-t     mount procfs on /proc in container process\n"
 						"-E     unsafe mode: allow -T even with mount ns not on slave/private or -H without -u\n"
 						"-R val set mount propagation (slave, shared, private, unchanged)\n"
 						"-L file log file, container use only\n"
-						"-H name set hostname\n"
+						"-H name set hostname, should be used with -u\n"
 						"-X n   create unix socketpair for communication, available on script as third argument\n"
 						"       and $CONTAINER_LAUNCHER_UNIX_FD in program\n"
 						"       n = 1 for stream, 2 for dgram, 3 for seqpacket\n"
@@ -485,8 +486,8 @@ invalid_propagation:
 						"        (intended use: cgroup.procs file of a cgroup specified by -P)\n"
 						"-K file lock file (will not be inherited to container)\n"
 						"-F     exec the script rather than forking it -- script takes two additional arguments:\n"
-						"       4: file descriptor of -K lock (if present, otherwise -1)\n"
-						"       5: notify file descriptor (write at least 1 byte there to indicate success)\n"
+						"       $4: file descriptor of -K lock (if present, otherwise -1)\n"
+						"       $5: notify file descriptor (write at least 1 byte there to indicate success)\n"
 						, argv[0]);
 				return 1;
 				break;
