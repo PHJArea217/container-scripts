@@ -130,8 +130,8 @@ const char *child_func(struct child_data *data) {
 	if (!data->no_setgroups && setgroups(0, NULL)) return "setgroups";
 	if (!data->no_uidgid) {
 		if ((data->set_inheritable || data->keepcaps) && prctl(PR_SET_KEEPCAPS, 1, 0, 0, 0)) return "PR_SET_KEEPCAPS";
-		if (setgid(data->gid)) return "setgid";
-		if (setuid(data->uid)) return "setuid";
+		if (setresgid(data->gid, data->gid, data->gid)) return "setgid";
+		if (setresuid(data->uid, data->uid, data->uid)) return "setuid";
 		/* setuid clears effective set but not permitted, try to restore those capabilities if possible */
 		if (data->set_inheritable || data->keepcaps) {
 			if (syscall(SYS_capset, &cap_h, (cap_user_data_t) &cap_d)) return "capset";
