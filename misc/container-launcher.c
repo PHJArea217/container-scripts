@@ -114,7 +114,9 @@ const char *child_func(struct child_data *data) {
 	uint64_t current_inheritable = ((uint64_t) cap_d[1].inheritable) << 32 | ((uint64_t) cap_d[0].inheritable);
 	
 	/* Enable all inheritable capabilities, also set effective to permitted */
-	current_inheritable = data->inh_all ? (current_inheritable | current_permitted) : data->inh_caps;
+	if (data->set_inheritable) {
+		current_inheritable = data->inh_all ? (current_inheritable | current_permitted) : data->inh_caps;
+	}
 	cap_d[1].inheritable = current_inheritable >> 32;
 	cap_d[0].inheritable = current_inheritable & 0xffffffff;
 	cap_d[1].effective = cap_d[1].permitted;
@@ -306,7 +308,6 @@ int main(int argc, char **argv) {
 			case 'a':
 				if (strcmp(optarg, "inherit") == 0) {
 					data_to_process.inh_ambient = 1;
-					data_to_process.set_inheritable = 1;
 				} else {
 					convert_uint64(optarg, &data_to_process.ambient_caps);
 				}
