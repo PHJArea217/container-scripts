@@ -5,6 +5,7 @@ set -eu
 # User namespace configuration
 # We use /proc/self/fd/"$2" instead of, say, /proc/"$1" due to potential race
 # conditions from PID reuse
+# For Python scripts, use os.open(..., dir_fd=N) instead.
 
 echo deny > /proc/self/fd/"$2"/setgroups
 echo 0 1000 1 > /proc/self/fd/"$2"/gid_map
