@@ -502,7 +502,7 @@ invalid_propagation:
 		fprintf(stderr, "%s: No program specified\n", argv[0]);
 		return 1;
 	}
-	if (!(data_to_process.mount_proc & 2)) {
+	if (!(mount_proc & 2)) {
 		if (!!hostname && !(clone_flags & CLONE_NEWUTS)) {
 			fputs("attempting to set hostname without CLONE_NEWUTS, use -E to override\n", stderr);
 			return 1;
