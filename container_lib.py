@@ -3,6 +3,10 @@
 import os, ctypes, subprocess
 
 libc = ctypes.CDLL(None)
+libc.mount.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_ulong, ctypes.c_void_p]
+libc.umount2.argtypes = [ctypes.c_char_p, ctypes.c_int]
+libc.setns.argtypes = [ctypes.c_int, ctypes.c_int]
+libc.unshare.argtypes = [ctypes.c_int]
 
 CLONE_NEWCGROUP = 0x2000000
 CLONE_NEWIPC = 0x8000000
