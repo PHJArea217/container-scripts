@@ -1,3 +1,4 @@
 container-init
 reset_cgroup
 __pycache__
+strace.out*
