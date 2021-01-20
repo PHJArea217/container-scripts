@@ -36,6 +36,7 @@ void reset_blocked_signals(void) {
 	if (sigprocmask(SIG_SETMASK, &s, NULL)) _exit(1);
 }
 void set_safe_fd(const char *pathname, int mode, int desired_fd) {
+	if (!pathname) return;
 	int f = open(pathname, mode);
 	if (f == -1) _exit(1);
 	if (f < 3) {
