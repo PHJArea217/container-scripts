@@ -1,1 +1,3 @@
 mini-init
+container-rootfs-mount
+reset_cgroup

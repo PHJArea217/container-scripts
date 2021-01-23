@@ -15,6 +15,9 @@
 #include <sys/select.h>
 #include <signal.h>
 #include <linux/wait.h>
+#ifndef P_PIDFD
+#define P_PIDFD 3
+#endif
 #define M_SIGRTMAX 64
 struct process_state {
 	struct process_state *next;
