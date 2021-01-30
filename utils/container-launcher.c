@@ -13,6 +13,7 @@
 #include <grp.h>
 #include <unistd.h>
 #include <sys/socket.h>
+#include <sys/mman.h>
 #include <fcntl.h>
 #include <string.h>
 #include <sys/prctl.h>
@@ -49,12 +50,13 @@ struct child_data {
 	int socketpair_fd;
 	int mount_propagation;
 	char *pivot_root_dir;
+	uint32_t *shared_mem_region;
 };
 struct pid_file {
 	char *filename;
 	struct pid_file *next;
 };
-void convert_uint64(const char *str, uint64_t *result) {
+static void convert_uint64(const char *str, uint64_t *result) {
 	if (!isdigit(str[0])) {
 		fprintf(stderr, "Invalid number: %s\n", str);
 		exit(1);
@@ -67,7 +69,8 @@ void convert_uint64(const char *str, uint64_t *result) {
 	}
 	*result = r;
 }
-int make_safe_fd(int new_fd, const char *perror_str, int do_cloexec) {
+#if 0
+static int make_safe_fd(int new_fd, const char *perror_str, int do_cloexec) {
 	if (new_fd == -1) {
 		perror(perror_str);
 		exit(1);
@@ -77,7 +80,8 @@ int make_safe_fd(int new_fd, const char *perror_str, int do_cloexec) {
 	close(new_fd);
 	return f;
 }
-const char *child_func(struct child_data *data) {
+#endif
+static const char *child_func(struct child_data *data) {
 	errno = 0;
 	if (data->no_new_privs) {
 		if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0)) return "prctl";
@@ -88,6 +92,11 @@ const char *child_func(struct child_data *data) {
 	}
 	/* step 1.25: clear env variables */
 	if (data->clear_env && !!clearenv()) return "clearenv";
+	if (data->socketpair_fd >= 0) {
+		char buf[40] = {0};
+		if (snprintf(buf, sizeof(buf), "%d", data->socketpair_fd) <= 0) return "!snprintf";
+		if (setenv("CONTAINER_LAUNCHER_UNIX_FD", buf, 1)) return "!setenv";
+	}
 	/* step 1.5: mount propagation */
 	if (data->mount_propagation) {
 		if (mount(NULL, "/", NULL, MS_REC|data->mount_propagation, NULL)) return "mount /proc";
@@ -100,6 +109,12 @@ const char *child_func(struct child_data *data) {
 		char buf = 0;
 		if (read(data->wait_fd, &buf, 1) != 1) return "notify fd";
 		close(data->wait_fd);
+		__sync_synchronize();
+		if (data->shared_mem_region) {
+			if (data->shared_mem_region[0] != 123456789) {
+				return "notify fd";
+			}
+		}
 	}
 
 	if (data->make_cgroup) {
@@ -203,29 +218,17 @@ const char *child_func(struct child_data *data) {
 		if (syscall(SYS_umount2, ".", MNT_DETACH)) return "!umount -l .";
 	}
 
-	if (data->socketpair_fd >= 0) {
-		char buf[40] = {0};
-		if (snprintf(buf, sizeof(buf), "%d", data->socketpair_fd) <= 0) return "!snprintf";
-		if (setenv("CONTAINER_LAUNCHER_UNIX_FD", buf, 1)) return "!setenv";
-	}
-
 	/* step 12: redirect stderr/stdout */
 	if (data->log_fd != -1) {
 		if (syscall(SYS_dup2, data->log_fd, 1) != 1) return "!dup2";
 		if (syscall(SYS_dup2, data->log_fd, 2) != 2) return "!dup2";
-		close(data->log_fd);
+		syscall(SYS_close, data->log_fd);
 	}
 	return NULL;
 }
-int main(int argc, char **argv) {
-	while (1) {
-		int dummy_socket = socket(AF_UNIX, SOCK_STREAM, 0);
-		if (dummy_socket == -1) return 1;
-		if (dummy_socket >= 3) {
-			close(dummy_socket);
-			break;
-		}
-	}
+int ctr_scripts_container_launcher_main(int argc, char **argv) {
+	/* trigger malloc init right now */
+	free(malloc(1));
 	uint64_t clone_flags = 0;
 	uint64_t uid = 0;
 	uint64_t gid = 0;
@@ -553,6 +556,12 @@ invalid_propagation:
 		exit(127);
 		return 127;
 	}
+	if (!do_exec_script) {
+		data_to_process.shared_mem_region = mmap(NULL, 4096, PROT_READ|PROT_WRITE, MAP_ANONYMOUS|MAP_SHARED, -1, 0);
+		if ((data_to_process.shared_mem_region == NULL) || (data_to_process.shared_mem_region == MAP_FAILED)) {
+			return 1;
+		}
+	}
 	int lockfile_fd = -1;
 	if (lockfile) {
 		lockfile_fd = open(lockfile, O_RDWR|O_CREAT|O_CLOEXEC, 0600);
@@ -632,6 +641,7 @@ invalid_propagation:
 		if (r) {
 			if (r[0] == '!') {
 				syscall(SYS_write, 2, "some process failed\n", 20);
+				syscall(SYS_exit, 1);
 				_exit(1);
 			}
 			perror(r);
@@ -773,6 +783,8 @@ invalid_propagation:
 			return my_exit_status;
 		}
 	}
+	data_to_process.shared_mem_region[0] = 123456789;
+	__sync_synchronize();
 	buf = 0;
 	if (write(pipe_to_child[1], &buf, 1) != 1) {
 		perror("child exited?");

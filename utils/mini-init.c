@@ -34,11 +34,11 @@ struct process_state {
 	unsigned do_respawn:1;
 	struct timespec respawn_at;
 };
-void reset_blocked_signals(void) {
+static void reset_blocked_signals(void) {
 	sigset_t s = {{0}};
 	if (sigprocmask(SIG_SETMASK, &s, NULL)) _exit(1);
 }
-void set_safe_fd(const char *pathname, int mode, int desired_fd) {
+static void set_safe_fd(const char *pathname, int mode, int desired_fd) {
 	if (!pathname) return;
 	int f = open(pathname, mode);
 	if (f == -1) _exit(1);
@@ -51,7 +51,7 @@ void set_safe_fd(const char *pathname, int mode, int desired_fd) {
 	if (dup2(f, desired_fd) < 0) _exit(1);
 	close(f);
 }
-void run_process(struct process_state *state, const struct timespec *current_time, int first) {
+static void run_process(struct process_state *state, const struct timespec *current_time, int first) {
 	if (state->has_wait) {
 		state->has_wait = 0;
 		goto process_terminate_restart;
@@ -117,23 +117,23 @@ struct init_signal_event {
 	char *script_pre;
 	char *script_post;
 };
-fd_set global_mask = {0};
-struct init_signal_event signal_table[M_SIGRTMAX+1];
-char *x_strdup(const char *str) {
+static fd_set global_mask = {0};
+static struct init_signal_event signal_table[M_SIGRTMAX+1];
+static char *x_strdup(const char *str) {
 	char *r = strdup(str);
 	if (!r) {
 		exit(1);
 	}
 	return r;
 }
-int compare_time(const struct timespec *a, const struct timespec *b) {
+static int compare_time(const struct timespec *a, const struct timespec *b) {
 	if (a->tv_sec > b->tv_sec) return 1;
 	if (a->tv_sec < b->tv_sec) return -1;
 	if (a->tv_nsec > b->tv_nsec) return 1;
 	if (a->tv_nsec < b->tv_nsec) return -1;
 	return 0;
 }
-void run_script(const char *name, int sig) {
+static void run_script(const char *name, int sig) {
 
 	char buf[15] = {0};
 	if (snprintf(buf, 15, "%d", sig) < 0) return;
@@ -144,7 +144,7 @@ void run_script(const char *name, int sig) {
 		_exit(127);
 	}
 }
-int main(int argc, char **argv) {
+int ctr_scripts_mini_init_main(int argc, char **argv) {
 	struct process_state *all_procs = NULL;
 	unsigned int current_signal = 0;
 	int opt = 0;

@@ -5,7 +5,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <string.h>
-void write_cgroup(int base_fd, const char *controller_name, const char *path) {
+static void write_cgroup(int base_fd, const char *controller_name, const char *path) {
 	char buf[PATH_MAX+1] = {0};
 	if (snprintf(buf, sizeof(buf)-1, "./%s/%s/cgroup.procs", controller_name, path) <= 0) abort();
 	int write_fd = openat(base_fd, buf, O_WRONLY|O_TRUNC|O_NONBLOCK|O_NOCTTY|O_CLOEXEC|O_NOFOLLOW, 0);
@@ -19,7 +19,7 @@ void write_cgroup(int base_fd, const char *controller_name, const char *path) {
 	}
 	close(write_fd);
 }
-int main(int argc, char **argv) {
+int ctr_scripts_reset_cgroup_main(int argc, char **argv) {
 	const char *base_path = "/sys/fs/cgroup";
 	const char *controllers = "blkio,cpu,devices,freezer,memory,perf_event,pids,rdma";
 	const char *addl_controllers = NULL;

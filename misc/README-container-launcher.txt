@@ -26,3 +26,6 @@ particularly ones that are fully aware of the behavior of namespaces
 
 Container Launcher was also intended to supplement my Notes about namespaces
 page on my website (https://www.peterjin.org/wiki/Notes_about_namespaces)
+
+Since the writing of this initial draft, container-launcher has moved into
+the "utils" folder, where it is integrated into "ctrtool".

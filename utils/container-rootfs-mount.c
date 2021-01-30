@@ -133,7 +133,7 @@ static int check_syscall(int result, const char *error_msg) {
 	}
 	return result;
 }
-int main(int argc, char **argv) {
+int ctr_scripts_container_rootfs_mount_main(int argc, char **argv) {
 	int opt = 0;
 	while ((opt = getopt(argc, argv, "o:")) > 0) {
 		switch(opt) {

@@ -1,13 +1,16 @@
-all: container-rootfs-mount mini-init reset_cgroup
+CC = gcc
+CCLD ?= $(CC)
+CFLAGS ?= -O2 -g
 
-container-rootfs-mount: container-rootfs-mount.c
-	$(CC) $(CFLAGS) -o $@ $< -Wall
-reset_cgroup: reset_cgroup.c
-	$(CC) $(CFLAGS) -o $@ $< -Wall
-mini-init: mini-init.c
-	$(CC) $(CFLAGS) -o $@ $< -Wall
+all: ctrtool
+
+ctrtool: container-launcher.o container-rootfs-mount.o mini-init.o reset_cgroup.o simple-renameat2.o mount_seq.o main.o
+	$(CCLD) $(CCLDFLAGS) -o $@ $^
+
+%.o: %.c
+	$(CC) $(CFLAGS) -c -o $@ $< -Wall
 
 clean:
-	rm -f container-rootfs-mount mini-init reset_cgroup
+	rm -f *.o ctrtool
 
 .PHONY: all clean
