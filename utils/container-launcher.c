@@ -701,7 +701,7 @@ invalid_propagation:
 	const char *pid_string = &c_buf1[6];
 	size_t pid_strlen = strlen(pid_string);
 	for (struct pid_file *in_pid = pidfile_list; in_pid;) {
-		int my_file = open(in_pid->filename, O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC);
+		int my_file = open(in_pid->filename, O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666);
 		if (my_file == -1) {
 			perror(in_pid->filename);
 			return 1;
