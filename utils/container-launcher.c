@@ -220,8 +220,8 @@ static const char *child_func(struct child_data *data) {
 
 	/* step 12: redirect stderr/stdout */
 	if (data->log_fd != -1) {
-		if (syscall(SYS_dup2, data->log_fd, 1) != 1) return "!dup2";
-		if (syscall(SYS_dup2, data->log_fd, 2) != 2) return "!dup2";
+		if (syscall(SYS_dup3, data->log_fd, 1, 0) != 1) return "!dup3";
+		if (syscall(SYS_dup3, data->log_fd, 2, 0) != 2) return "!dup3";
 		syscall(SYS_close, data->log_fd);
 	}
 	return NULL;
