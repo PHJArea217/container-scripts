@@ -1,6 +1,7 @@
-CC = gcc
+CC ?= gcc
 CCLD ?= $(CC)
-CFLAGS ?= -O2 -g
+CFLAGS ?= -O2 -g -fstack-protector-strong -D_FORTIFY_SOURCE=2
+CCLDFLAGS ?= -Wl,-z,relro -Wl,-z,now
 
 all: ctrtool
 
