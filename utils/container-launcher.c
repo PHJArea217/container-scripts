@@ -963,7 +963,15 @@ invalid_propagation:
 	if (snprintf(c_buf5, sizeof(c_buf5), "%d", pipe_to_child[1]) <= 0) return 1;
 	if (do_pidfd) {
 		char c_buf6[100];
+#ifdef SYS_pidfd_open
 		int pid_fd = syscall(SYS_pidfd_open, clone_result, 0, 0, 0, 0, 0);
+#elif defined(__x86_64__) || defined(__i386__)
+		int pid_fd = syscall(434, clone_result, 0, 0, 0, 0, 0);
+#else
+		int pid_fd = -1;
+		fprintf(stderr, "pidfd_open not supported with the current kernel headers!\n");
+		return 1;
+#endif
 		if (pid_fd == -1) {
 			perror("pidfd_open");
 			return 1;
