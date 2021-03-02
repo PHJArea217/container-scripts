@@ -9,6 +9,7 @@ int ctr_scripts_mini_init_main(int argc, char **argv);
 int ctr_scripts_mount_seq_main(int argc, char **argv);
 int ctr_scripts_reset_cgroup_main(int argc, char **argv);
 int ctr_scripts_simple_renameat2_main(int argc, char **argv);
+int ctr_scripts_debug_shell_main(int argc, char **argv);
 struct command_def {
 	const char *name;
 	int (*main_function)(int, char **);
@@ -16,6 +17,7 @@ struct command_def {
 static struct command_def command_list[] = {
 	{"container-launcher", ctr_scripts_container_launcher_main},
 	{"container-rootfs-mount", ctr_scripts_container_rootfs_mount_main},
+	{"debug_shell", ctr_scripts_debug_shell_main},
 	{"init", ctr_scripts_mini_init_main},
 	{"launcher", ctr_scripts_container_launcher_main},
 	{"mini-init", ctr_scripts_mini_init_main},

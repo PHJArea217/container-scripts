@@ -149,6 +149,7 @@ int ctr_scripts_mini_init_main(int argc, char **argv) {
 	unsigned int current_signal = 0;
 	int opt = 0;
 	FD_ZERO(&global_mask);
+	/* TODO: use - option for command arguments */
 	while ((opt = getopt(argc, argv, "n:s:c:a:0:1:2:C:r:i:I:")) >= 0) {
 		switch(opt) {
 			case 'n':
