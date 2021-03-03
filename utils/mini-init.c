@@ -13,8 +13,10 @@
 #include <errno.h>
 #include <string.h>
 #include <sys/select.h>
+#include <sys/socket.h>
 #include <signal.h>
 #include <linux/wait.h>
+#include "ctrtool-common.h"
 #ifndef P_PIDFD
 #define P_PIDFD 3
 #endif
@@ -22,6 +24,8 @@
 struct process_state {
 	struct process_state *next;
 	char **argv;
+	int *inherit_fds;
+	size_t nr_inherit_fds;
 	unsigned int nr_args;
 	char *ctty_in;
 	char *ctty_out;
@@ -32,6 +36,7 @@ struct process_state {
 	unsigned running:1;
 	unsigned has_wait:1;
 	unsigned do_respawn:1;
+	unsigned set_listen_pid:1;
 	struct timespec respawn_at;
 };
 static void reset_blocked_signals(void) {
@@ -51,6 +56,7 @@ static void set_safe_fd(const char *pathname, int mode, int desired_fd) {
 	if (dup2(f, desired_fd) < 0) _exit(1);
 	close(f);
 }
+static int fd_share_mode = 0;
 static void run_process(struct process_state *state, const struct timespec *current_time, int first) {
 	if (state->has_wait) {
 		state->has_wait = 0;
@@ -79,6 +85,12 @@ static void run_process(struct process_state *state, const struct timespec *curr
 				set_safe_fd(state->ctty_in, O_RDONLY, 0);
 				set_safe_fd(state->ctty_out, O_WRONLY, 1);
 				set_safe_fd(state->ctty_err, O_WRONLY, 2);
+				if (state->set_listen_pid) {
+					ctrtool_mini_init_set_listen_pid_fds(state->nr_inherit_fds);
+				}
+				if (fd_share_mode) {
+					ctrtool_mini_init_set_fds(state->inherit_fds, state->nr_inherit_fds);
+				}
 				execv(state->argv[0], state->argv);
 				_exit(127);
 			}
@@ -144,13 +156,15 @@ static void run_script(const char *name, int sig) {
 		_exit(127);
 	}
 }
-int ctr_scripts_mini_init_main(int argc, char **argv) {
+
+static int ctr_scripts_mini_init_main_c(int argc, char **argv, int new_version) {
 	struct process_state *all_procs = NULL;
 	unsigned int current_signal = 0;
 	int opt = 0;
 	FD_ZERO(&global_mask);
 	/* TODO: use - option for command arguments */
-	while ((opt = getopt(argc, argv, "n:s:c:a:0:1:2:C:r:i:I:")) >= 0) {
+	static const char *my_optstring = "-n:s:c:a:0:1:2:C:r:i:I:f:pS";
+	while ((opt = getopt(argc, argv, new_version ? my_optstring : &my_optstring[1])) >= 0) {
 		switch(opt) {
 			case 'n':
 				;struct process_state *new_p = calloc(sizeof(struct process_state), 1);
@@ -171,6 +185,7 @@ int ctr_scripts_mini_init_main(int argc, char **argv) {
 				current_signal = sig_num;
 				if (current_signal > 0) FD_SET(current_signal-1, &global_mask);
 				break;
+			case 1:
 			case 'c':
 				if (!all_procs) {
 					fputs("Cannot use -c before -n\n", stderr);
@@ -250,6 +265,36 @@ int ctr_scripts_mini_init_main(int argc, char **argv) {
 				free(signal_table[current_signal].script_post);
 				signal_table[current_signal].script_post = x_strdup(optarg);
 				break;
+			case 'f':
+				if (!fd_share_mode) {
+					fputs("-f can only be used in -S mode\n", stderr);
+					return 1;
+				}
+				if (!all_procs) {
+					fputs("Cannot use -f before -n\n", stderr);
+					return 1;
+				}
+				all_procs->inherit_fds = reallocarray(all_procs->inherit_fds, sizeof(int), ++all_procs->nr_inherit_fds);
+				if (!all_procs->inherit_fds) {
+					return 1;
+				}
+				int i_fd = atoi(optarg);
+				if (i_fd < 3) {
+					fputs("Inherited file descriptor must be >= 3\n", stderr);
+					return 1;
+				}
+				all_procs->inherit_fds[all_procs->nr_inherit_fds - 1] = i_fd;
+				break;
+			case 'S':
+				fd_share_mode = 1;
+				break;
+			case 'p':
+				if (!all_procs) {
+					fputs("Cannot use -p before -n\n", stderr);
+					return 1;
+				}
+				all_procs->set_listen_pid = 1;
+				break;
 			default:
 				/* FIXME: help text */
 				return 1;
@@ -260,6 +305,20 @@ int ctr_scripts_mini_init_main(int argc, char **argv) {
 		fputs("Must run as PID 1\n", stderr);
 		return 1;
 	}
+	if (fd_share_mode) {
+		int test_fd = socket(AF_UNIX, SOCK_STREAM, 0);
+		if (test_fd < 0) {
+			goto self_test_failed;
+		}
+		if (fcntl(test_fd, F_GETFD, 0) < 0) goto self_test_failed;
+		if (ctrtool_close_range(test_fd, test_fd, 0)) goto self_test_failed;
+		if (fcntl(test_fd, F_GETFD, 0) >= 0) goto self_test_failed;
+		goto self_test_done;
+self_test_failed:
+		fputs("close_range self test failed. -S option is currently only supported on\nLinux kernels 5.9 and up\n", stderr);
+		return 1;
+	}
+self_test_done:
 	FD_SET(SIGCHLD-1, &global_mask);
 	if (syscall(SYS_rt_sigprocmask, SIG_BLOCK, &global_mask, NULL, 8)) {
 		return 1;
@@ -387,4 +446,10 @@ int ctr_scripts_mini_init_main(int argc, char **argv) {
 			break;
 	}
 	return 0;
+}
+int ctr_scripts_mini_init2_main(int argc, char **argv) {
+	return ctr_scripts_mini_init_main_c(argc, argv, 1);
+}
+int ctr_scripts_mini_init_main(int argc, char **argv) {
+	return ctr_scripts_mini_init_main_c(argc, argv, 0);
 }

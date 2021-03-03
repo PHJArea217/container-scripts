@@ -6,10 +6,12 @@
 int ctr_scripts_container_launcher_main(int argc, char **argv);
 int ctr_scripts_container_rootfs_mount_main(int argc, char **argv);
 int ctr_scripts_mini_init_main(int argc, char **argv);
+int ctr_scripts_mini_init2_main(int argc, char **argv);
 int ctr_scripts_mount_seq_main(int argc, char **argv);
 int ctr_scripts_reset_cgroup_main(int argc, char **argv);
 int ctr_scripts_simple_renameat2_main(int argc, char **argv);
 int ctr_scripts_debug_shell_main(int argc, char **argv);
+int ctr_scripts_set_fds_main(int argc, char **argv);
 struct command_def {
 	const char *name;
 	int (*main_function)(int, char **);
@@ -19,12 +21,15 @@ static struct command_def command_list[] = {
 	{"container-rootfs-mount", ctr_scripts_container_rootfs_mount_main},
 	{"debug_shell", ctr_scripts_debug_shell_main},
 	{"init", ctr_scripts_mini_init_main},
+	{"init2", ctr_scripts_mini_init2_main},
 	{"launcher", ctr_scripts_container_launcher_main},
 	{"mini-init", ctr_scripts_mini_init_main},
+	{"mini-init2", ctr_scripts_mini_init2_main},
 	{"mount_seq", ctr_scripts_mount_seq_main},
 	{"renameat2", ctr_scripts_simple_renameat2_main},
 	{"reset_cgroup", ctr_scripts_reset_cgroup_main},
 	{"rootfs-mount", ctr_scripts_container_rootfs_mount_main},
+	{"set_fds", ctr_scripts_set_fds_main},
 	{"simple-renameat2", ctr_scripts_simple_renameat2_main},
 };
 static int compare_command_def(const void *a, const void *b) {
@@ -72,7 +77,7 @@ int main(int argc, char **argv) {
 	return search_command(argv[0], argc, argv);
 default_lookup:
 	if (argc < 2) {
-		fprintf(stderr, "Usage: %s [init|launcher|mount_seq|renameat2|reset_cgroup|rootfs-mount] [ARGUMENTS]\n", argv[0]);
+		fprintf(stderr, "Usage: %s [debug_shell|init|launcher|mount_seq|renameat2|reset_cgroup|rootfs-mount|set_fds] [ARGUMENTS]\n", argv[0]);
 		return 255;
 	}
 	return search_command(argv[1], argc-1, &argv[1]);

@@ -5,7 +5,7 @@ CCLDFLAGS ?= -Wl,-z,relro -Wl,-z,now
 
 all: ctrtool
 
-ctrtool: container-launcher.o cl-nsenter.o ctrtool-common.o container-rootfs-mount.o debug_shell.o mini-init.o reset_cgroup.o simple-renameat2.o mount_seq.o main.o
+ctrtool: container-launcher.o cl-nsenter.o ctrtool-common.o container-rootfs-mount.o debug_shell.o mini-init.o reset_cgroup.o set_fds.o simple-renameat2.o mount_seq.o main.o
 	$(CCLD) $(CCLDFLAGS) -o $@ $^
 
 %.o: %.c

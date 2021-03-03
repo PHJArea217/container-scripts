@@ -1,13 +1,17 @@
 #define _GNU_SOURCE
+#include "ctrtool-common.h"
 #include <linux/filter.h>
 #include <linux/seccomp.h>
 #include <stdint.h>
+#include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <errno.h>
 #include <sys/uio.h>
 #include <syscall.h>
 #include <unistd.h>
+#include <limits.h>
+#include <fcntl.h>
 static int int32_to_num(uint32_t num, char *result) {
 	static char digits[] = "0123456789";
 	result[9] = digits[num % 10];
@@ -81,4 +85,62 @@ int ctrtool_install_seccomp_from_fd(int fd, struct sock_fprog *result) {
 	result->len = seccomp_size;
 	result->filter = (struct sock_filter *) buffer;
 	return 0;
+}
+int ctrtool_close_range(int min_fd, int max_fd, unsigned int flags) {
+	if (min_fd < 0) {
+		errno = EINVAL;
+		return -1;
+	}
+	if (max_fd < 0) {
+		errno = EINVAL;
+		return -1;
+	}
+#ifdef SYS_close_range
+	return syscall(SYS_close_range, min_fd, max_fd, flags, 0, 0, 0);
+#elif defined(__x86_64__) || defined(__i386__)
+	return syscall(436, min_fd, max_fd, flags, 0, 0, 0);
+#else
+	errno = ENOSYS;
+	return -1;
+#endif
+}
+/* TODO: Maybe make the "3" customizable? */
+void ctrtool_mini_init_set_fds(int *fds, size_t num_fds) {
+	if (num_fds > INT_MAX - 3) {
+		abort();
+	}
+	int min_fd = 3 + num_fds;
+	for (size_t i = 0; i < num_fds; i++) {
+		if (fds[i] >= 3 && fds[i] < min_fd) {
+			int new_fd = fcntl(fds[i], F_DUPFD_CLOEXEC, min_fd);
+			if (new_fd < min_fd) {
+				_exit(127);
+			}
+			if (fds[i] >= 3) close(fds[i]);
+			fds[i] = new_fd;
+		}
+	}
+	for (size_t i = 0; i < num_fds; i++) {
+		if (dup2(fds[i], 3 + i) < 0) {
+			_exit(127);
+		}
+		if (fds[i] >= 3) close(fds[i]);
+		fds[i] = 3 + i;
+	}
+	int close_range_return = ctrtool_close_range(min_fd, INT_MAX, 0);
+	if (close_range_return < 0) {
+		_exit(127);
+	}
+}
+void ctrtool_mini_init_set_listen_pid_fds(int nr_fds) {
+	char value_buf[12];
+	memset(value_buf, 0, 12);
+	pid_t current_pid = getpid();
+	if (current_pid <= 0) _exit(127);
+	int p = int32_to_num(current_pid, value_buf);
+	if (setenv("LISTEN_PID", &value_buf[p], 1)) _exit(127);
+
+	memset(value_buf, 0, 12);
+	p = int32_to_num(nr_fds, value_buf);
+	if (setenv("LISTEN_FDS", &value_buf[p], 1)) _exit(127);
 }
