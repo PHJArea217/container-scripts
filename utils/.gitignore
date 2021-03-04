@@ -1,2 +1,4 @@
 ctrtool
+ctrtool-static
+ctrtool.a
 *.o
