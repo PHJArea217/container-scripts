@@ -160,10 +160,13 @@ static void run_script(const char *name, int sig) {
 static int ctr_scripts_mini_init_main_c(int argc, char **argv, int new_version) {
 	struct process_state *all_procs = NULL;
 	unsigned int current_signal = 0;
+#if 0
+	int make_cloexec = 0;
+#endif
 	int opt = 0;
 	FD_ZERO(&global_mask);
 	/* TODO: use - option for command arguments */
-	static const char *my_optstring = "-n:s:c:a:0:1:2:C:r:i:I:f:pS";
+	static const char *my_optstring = "-n:s:c:a:0:1:2:C:r:i:I:f:pS"; // X
 	while ((opt = getopt(argc, argv, new_version ? my_optstring : &my_optstring[1])) >= 0) {
 		switch(opt) {
 			case 'n':
@@ -295,12 +298,18 @@ static int ctr_scripts_mini_init_main_c(int argc, char **argv, int new_version) 
 				}
 				all_procs->set_listen_pid = 1;
 				break;
+#if 0
+			case 'X':
+				make_cloexec = 1;
+				break;
+#endif
 			default:
 				/* FIXME: help text */
 				return 1;
 				break;
 		}
 	}
+	/* TODO: Enable setting child subreaper */
 	if (getpid() != 1) {
 		fputs("Must run as PID 1\n", stderr);
 		return 1;
@@ -319,6 +328,11 @@ self_test_failed:
 		return 1;
 	}
 self_test_done:
+#if 0
+	if (make_cloexec) {
+		if (ctrtool_close_range(3, INT_MAX
+	}
+#endif
 	FD_SET(SIGCHLD-1, &global_mask);
 	if (syscall(SYS_rt_sigprocmask, SIG_BLOCK, &global_mask, NULL, 8)) {
 		return 1;
