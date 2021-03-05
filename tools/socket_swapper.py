@@ -8,15 +8,19 @@ TMPFILE = sys.argv[3]
 
 while True:
     try:
+        os.unlink(TMPFILE)
+    except:
+        pass
+
+    try:
         os.link(OLDFILE, TMPFILE)
         stat_r = os.lstat(TMPFILE)
         if stat.S_ISSOCK(stat_r.st_mode):
             os.rename(TMPFILE, NEWFILE)
-    except:
-        try:
+        else:
             os.unlink(TMPFILE)
-        except:
-            pass
+    except:
+        pass
     
     try:
         time.sleep(5)
