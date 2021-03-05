@@ -71,7 +71,7 @@ int ctr_scripts_debug_shell_main(int argc, char **argv) {
 			perror("open /dev/null");
 			return 1;
 		}
-		assert(dup2(replacement_fd, accept_fd) == accept_fd);
+		if (dup2(replacement_fd, accept_fd) != accept_fd) return 1;
 		close(replacement_fd);
 		accept_fd = accept_replace_fd;
 	}
@@ -90,7 +90,7 @@ int ctr_scripts_debug_shell_main(int argc, char **argv) {
 		}
 		if (setsid() < 0) _exit(255);
 	}
-	assert(signal(SIGCHLD, SIG_IGN) != SIG_ERR);
+	if (signal(SIGCHLD, SIG_IGN) == SIG_ERR) _exit(255);
 	while (1) {
 		int new_fd = accept(accept_fd, NULL, NULL);
 		if (new_fd < 0) {
@@ -104,7 +104,7 @@ int ctr_scripts_debug_shell_main(int argc, char **argv) {
 			if (dup2(new_fd, 0) != 0) _exit(255);
 			if (dup2(new_fd, 1) != 1) _exit(255);
 			if (new_fd > 1) close(new_fd);
-			assert(signal(SIGCHLD, SIG_DFL) != SIG_ERR);
+			if (signal(SIGCHLD, SIG_DFL) == SIG_ERR) _exit(255);
 			execvp(shell_command[0], shell_command);
 			_exit(127);
 			return 127;
