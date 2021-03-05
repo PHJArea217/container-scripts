@@ -144,3 +144,11 @@ void ctrtool_mini_init_set_listen_pid_fds(int nr_fds) {
 	p = int32_to_num(nr_fds, value_buf);
 	if (setenv("LISTEN_FDS", &value_buf[p], 1)) _exit(127);
 }
+char *ctrtool_strdup(const char *str) {
+	char *r = strdup(str);
+	if (!r) {
+//		exit(255);
+		abort();
+	}
+	return r;
+}

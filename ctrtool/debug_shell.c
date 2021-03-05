@@ -1,4 +1,5 @@
 #define _GNU_SOURCE
+#include "ctrtool-common.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdint.h>
@@ -22,7 +23,7 @@ int ctr_scripts_debug_shell_main(int argc, char **argv) {
 				if (!shell_command) {
 					return 1;
 				}
-				shell_command[shell_command_len-1] = strdup(optarg);
+				shell_command[shell_command_len-1] = ctrtool_strdup(optarg);
 				break;
 			case 'f':
 				accept_fd = atoi(optarg);

@@ -13,7 +13,7 @@ int ctr_scripts_set_fds_main(int argc, char **argv) {
 		switch (opt) {
 			case 'f':
 				free(fd_list);
-				fd_list = strdup(optarg);
+				fd_list = ctrtool_strdup(optarg);
 				if (fd_list == NULL) return 1;
 				break;
 			case 's':

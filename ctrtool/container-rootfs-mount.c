@@ -1,3 +1,4 @@
+#include "ctrtool-common.h"
 #include <ctype.h>
 #include <errno.h>
 #include <getopt.h>
@@ -143,7 +144,7 @@ int ctr_scripts_container_rootfs_mount_main(int argc, char **argv) {
 					return 1;
 				}
 				struct cl_args *current_arg = &my_args[my_args_size++];
-				char *strdup_optarg = strdup(optarg);
+				char *strdup_optarg = ctrtool_strdup(optarg);
 				char *b = strchr(strdup_optarg, '=');
 				if (!b) {
 					fprintf(stderr, "No '=' character in option: %s\n", strdup_optarg);
@@ -164,7 +165,7 @@ int ctr_scripts_container_rootfs_mount_main(int argc, char **argv) {
 		fprintf(stderr, "%s: Mountpoint not specified\n", argv[0]);
 		return 1;
 	}
-	char *mount_directory = strdup(argv[optind]);
+	char *mount_directory = ctrtool_strdup(argv[optind]);
 #define BOOL_FALSE(name) parse_arg_bool(get_arg(name), NULL, 0)
 #define BOOL_TRUE(name) parse_arg_bool(get_arg(name), NULL, 1)
 	int do_run_dirs = BOOL_TRUE("run_dirs");

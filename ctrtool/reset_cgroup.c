@@ -1,4 +1,5 @@
 #define _GNU_SOURCE
+#include "ctrtool-common.h"
 #include <stdio.h>
 #include <limits.h>
 #include <stdlib.h>
@@ -64,7 +65,7 @@ int ctr_scripts_reset_cgroup_main(int argc, char **argv) {
 		return 1;
 	}
 	char *saveptr = NULL;
-	char *controllers_d = strdup(controllers);
+	char *controllers_d = ctrtool_strdup(controllers);
 	for (char *controller = strtok_r(controllers_d, ",", &saveptr); controller; controller = strtok_r(NULL, ",", &saveptr)) {
 		write_cgroup(base_fd, controller, path);
 	}
@@ -72,7 +73,7 @@ int ctr_scripts_reset_cgroup_main(int argc, char **argv) {
 	if (do_systemd) write_cgroup(base_fd, "systemd", path);
 	if (do_unified) write_cgroup(base_fd, "unified", path);
 	if (addl_controllers) {
-		controllers_d = strdup(addl_controllers);
+		controllers_d = ctrtool_strdup(addl_controllers);
 		for (char *controller = strtok_r(controllers_d, ",", &saveptr); controller; controller = strtok_r(NULL, ",", &saveptr)) {
 			write_cgroup(base_fd, controller, path);
 		}

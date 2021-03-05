@@ -433,7 +433,7 @@ int ctr_scripts_container_launcher_main(int argc, char **argv) {
 				break;
 			case 'x':
 				free(script_file);
-				script_file = strdup(optarg);
+				script_file = ctrtool_strdup(optarg);
 				if (script_file == NULL) exit(1);
 				break;
 			case 'I':
@@ -511,12 +511,12 @@ invalid_propagation:
 				break;
 			case 'L':
 				free(logfile);
-				logfile = strdup(optarg);
+				logfile = ctrtool_strdup(optarg);
 				if (logfile == NULL) exit(1);
 				break;
 			case 'H':
 				free(hostname);
-				hostname = strdup(optarg);
+				hostname = ctrtool_strdup(optarg);
 				if (hostname == NULL) exit(1);
 				break;
 			case 'X':
@@ -531,12 +531,12 @@ invalid_propagation:
 				break;
 			case 'e':
 				free(command_shell);
-				command_shell = strdup(optarg);
+				command_shell = ctrtool_strdup(optarg);
 				if (command_shell == NULL) exit(1);
 				break;
 			case 'r':
 				free(data_to_process.pivot_root_dir);
-				data_to_process.pivot_root_dir = strdup(optarg);
+				data_to_process.pivot_root_dir = ctrtool_strdup(optarg);
 				if (data_to_process.pivot_root_dir == NULL) exit(1);
 				break;
 			case 'V':
@@ -544,17 +544,17 @@ invalid_propagation:
 				break;
 			case 'M':
 				free(emptyfile);
-				emptyfile = strdup(optarg);
+				emptyfile = ctrtool_strdup(optarg);
 				if (emptyfile == NULL) exit(1);
 				break;
 			case 'K':
 				free(lockfile);
-				lockfile = strdup(optarg);
+				lockfile = ctrtool_strdup(optarg);
 				if (lockfile == NULL) exit(1);
 				break;
 			case 'P':
 				;struct pid_file *new_pidfile = calloc(sizeof(struct pid_file), 1);
-				new_pidfile->filename = strdup(optarg);
+				new_pidfile->filename = ctrtool_strdup(optarg);
 				new_pidfile->next = pidfile_list;
 				pidfile_list = new_pidfile;
 				break;
@@ -580,12 +580,12 @@ invalid_propagation:
 				break;
 			case 70001:
 				free(data_to_process.exec_file);
-				data_to_process.exec_file = strdup(optarg);
+				data_to_process.exec_file = ctrtool_strdup(optarg);
 				if (!data_to_process.exec_file) exit(1);
 				break;
 			case 70002:
 				free(exec_file);
-				exec_file = strdup(optarg);
+				exec_file = ctrtool_strdup(optarg);
 				if (!exec_file) exit(1);
 				break;
 			case 70003:
@@ -593,7 +593,7 @@ invalid_propagation:
 				break;
 			case 70004:
 				free(uid_map_str);
-				uid_map_str = strdup(optarg);
+				uid_map_str = ctrtool_strdup(optarg);
 				if (!uid_map_str) exit(1);
 				uid_map_strlen = 0;
 				char *uid_map_b = uid_map_str;
@@ -606,7 +606,7 @@ invalid_propagation:
 				break;
 			case 70005:
 				free(gid_map_str);
-				gid_map_str = strdup(optarg);
+				gid_map_str = ctrtool_strdup(optarg);
 				if (!gid_map_str) exit(1);
 				gid_map_strlen = 0;
 				char *gid_map_b = gid_map_str;
@@ -631,7 +631,7 @@ invalid_propagation:
 					fprintf(stderr, "Maximum of %d nsenter requests are allowed\n", NSENTER_REQUESTS_MAX);
 					return 1;
 				}
-				char *nsenter_request = strdup(optarg);
+				char *nsenter_request = ctrtool_strdup(optarg);
 				if (!nsenter_request) return 1;
 				nsenter_requests[current_nsenter_point++] = nsenter_request;
 				break;
@@ -640,7 +640,7 @@ invalid_propagation:
 					fprintf(stderr, "Maximum of %d nsenter-post requests are allowed\n", NSENTER_REQUESTS_MAX);
 					return 1;
 				}
-				char *nsenter_post_request = strdup(optarg);
+				char *nsenter_post_request = ctrtool_strdup(optarg);
 				if (!nsenter_post_request) return 1;
 				nsenter_post_requests[current_nsenter_post_point++] = nsenter_post_request;
 				break;

@@ -1,4 +1,5 @@
 #define _GNU_SOURCE
+#include "ctrtool-common.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <getopt.h>
@@ -316,10 +317,13 @@ int ctr_scripts_mount_seq_main(int argc, char **argv) {
 				if (m_list_size >= m_list_max) {
 					m_list_max += 25;
 					m_list = reallocarray(m_list, m_list_max, sizeof(struct mount_seq));
+					if (!m_list) {
+						return 255;
+					}
 				}
 				current = &m_list[m_list_size++];
 				memset(current, 0, sizeof(struct mount_seq));
-				current->target = strdup(optarg);
+				current->target = ctrtool_strdup(optarg);
 				current->cmd = opt;
 				break;
 			case 'k':
@@ -361,7 +365,7 @@ int ctr_scripts_mount_seq_main(int argc, char **argv) {
 				switch (current->cmd) {
 					case 'm':
 						free(current->opts.mount_opts.source);
-						current->opts.mount_opts.source = strdup(optarg);
+						current->opts.mount_opts.source = ctrtool_strdup(optarg);
 						break;
 					default:
 						error_str = "-s may only be used with -m";
@@ -375,7 +379,7 @@ int ctr_scripts_mount_seq_main(int argc, char **argv) {
 				switch (current->cmd) {
 					case 'm':
 						free(current->opts.mount_opts.fstype);
-						current->opts.mount_opts.fstype = strdup(optarg);
+						current->opts.mount_opts.fstype = ctrtool_strdup(optarg);
 						break;
 					default:
 						error_str = "-t may only be used with -m";
@@ -440,7 +444,7 @@ int ctr_scripts_mount_seq_main(int argc, char **argv) {
 				switch (current->cmd) {
 					case 'm':
 						free(current->opts.mount_opts.data);
-						current->opts.mount_opts.data = strdup(optarg);
+						current->opts.mount_opts.data = ctrtool_strdup(optarg);
 						break;
 					default:
 						error_str = "-o may only be used with -m";

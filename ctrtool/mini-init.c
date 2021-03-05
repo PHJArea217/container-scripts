@@ -17,6 +17,7 @@
 #include <signal.h>
 #include <linux/wait.h>
 #include "ctrtool-common.h"
+#define x_strdup ctrtool_strdup
 #ifndef P_PIDFD
 #define P_PIDFD 3
 #endif
@@ -131,13 +132,6 @@ struct init_signal_event {
 };
 static fd_set global_mask = {0};
 static struct init_signal_event signal_table[M_SIGRTMAX+1];
-static char *x_strdup(const char *str) {
-	char *r = strdup(str);
-	if (!r) {
-		exit(1);
-	}
-	return r;
-}
 static int compare_time(const struct timespec *a, const struct timespec *b) {
 	if (a->tv_sec > b->tv_sec) return 1;
 	if (a->tv_sec < b->tv_sec) return -1;
