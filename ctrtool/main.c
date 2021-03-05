@@ -77,7 +77,8 @@ int main(int argc, char **argv) {
 	return search_command(argv[0], argc, argv);
 default_lookup:
 	if (argc < 2) {
-		fprintf(stderr, "Usage: %s [debug_shell|init|launcher|mount_seq|renameat2|reset_cgroup|rootfs-mount|set_fds] [ARGUMENTS]\n", argv[0]);
+		fprintf(stderr, "Usage: %s [ debug_shell | init | launcher | mount_seq\n"
+				"\t| renameat2 | reset_cgroup | rootfs-mount | set_fds ] [ARGUMENTS]\n", argv[0]);
 		return 255;
 	}
 	return search_command(argv[1], argc-1, &argv[1]);
