@@ -185,7 +185,7 @@ pid_part_done:
 	free(dup_config);
 	qsort(config_lines, config_nr, sizeof(struct bind_anywhere_config_line), compare_config_lines);
 	if (__sync_bool_compare_and_swap(&has_config_lines_global, 0, 1)) {
-		__sync_synchronize();
+//		__sync_synchronize();
 		config_lines_global = config_lines;
 		config_lines_global_nr = config_nr;
 		__sync_synchronize();
