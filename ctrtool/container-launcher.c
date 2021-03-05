@@ -1022,7 +1022,10 @@ no_emptyfile:;
 			perror(in_pid->filename);
 			return 1;
 		}
-		close(my_file);
+		if (close(my_file)) {
+			perror(in_pid->filename);
+			return 1;
+		}
 		struct pid_file *next = in_pid->next;
 		free(in_pid->filename);
 		free(in_pid);
