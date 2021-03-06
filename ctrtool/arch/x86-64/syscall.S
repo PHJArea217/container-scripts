@@ -1,0 +1,15 @@
+.globl ctrtool_arch_x86_64_syscall_r, ctrtool_arch_x86_64_exit
+ctrtool_arch_x86_64_syscall_r:
+	endbr64
+	mov %rcx, %r10
+	mov 8(%rsp), %rax
+	syscall
+	ret
+ctrtool_arch_x86_64_exit:
+	xor %rax, %rax
+	mov $60, %al
+	syscall
+x:	hlt
+	jmp x
+
+.section .note.GNU-stack
