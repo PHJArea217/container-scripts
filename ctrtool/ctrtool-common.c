@@ -53,7 +53,7 @@ void ctrtool_cheap_perror(const char *str, int errno_) {
 		{b, 10},
 		{"\n", 1}
 	};
-	syscall(SYS_writev, STDERR_FILENO, iov, 4);
+	ctrtool_syscall(SYS_writev, STDERR_FILENO, iov, 4, 0, 0, 0);
 }
 int ctrtool_install_seccomp_from_fd(int fd, struct sock_fprog *result) {
 	size_t buffer_size = 0; /* in bytes*/
@@ -151,4 +151,28 @@ char *ctrtool_strdup(const char *str) {
 		abort();
 	}
 	return r;
+}
+long ctrtool_syscall_errno_i(long nr, int *errno_ptr, long a, long b, long c, long d, long e, long f) {
+	unsigned long return_value = ctrtool_syscall(nr, a, b, c, d, e, f);
+	if (return_value > -4096UL) {
+		*errno_ptr = -return_value;
+		return -1;
+	}
+	return return_value;
+}
+int ctrtool_arraylist_expand(struct ctrtool_arraylist *list, const void *new_element, size_t step) {
+	if (step <= 0) {
+		return -1;
+	}
+	size_t new_list_size = list->nr + 1;
+	if (new_list_size > list->max) {
+		size_t new_list_max = list->max + step;
+		void *new_list_head = reallocarray(list->start, list->elem_size, new_list_max);
+		if (new_list_head == NULL) return -1;
+		list->start = new_list_head;
+		list->max = new_list_max;
+	}
+	memcpy(&((char *) list->start)[list->nr * list->elem_size], new_element, list->elem_size);
+	list->nr = new_list_size;
+	return 0;
 }

@@ -61,6 +61,7 @@ struct child_data {
 	char *exec_file;
 	char *pivot_root_dir;
 	uint32_t *shared_mem_region;
+	struct ctrtool_arraylist close_fds;
 };
 struct pid_file {
 	char *filename;
@@ -94,10 +95,23 @@ static int make_safe_fd(int new_fd, const char *perror_str, int do_cloexec) {
 	return f;
 }
 #endif
-static const char *child_func(struct child_data *data) {
+static const char *child_func(struct child_data *data, int *errno_ptr) {
 	errno = 0;
 	if (data->no_new_privs) {
 		if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0)) return "prctl";
+	}
+	if (data->close_fds.nr) {
+		int *fd_start = data->close_fds.start;
+		for (size_t i = 0; i < data->close_fds.nr; i++) {
+//			if (fcntl(fd_start[i], F_SETFD, FD_CLOEXEC)) {
+//				return "close";
+//			}
+			if (close(fd_start[i])) {
+				return "close";
+			}
+		}
+		free(fd_start);
+		data->close_fds.start = NULL;
 	}
 	/* step 1: setsid() */
 	if (data->do_setsid) {
@@ -164,7 +178,7 @@ static const char *child_func(struct child_data *data) {
 	/* step 4: set capabilities */
 	struct __user_cap_header_struct cap_h = {_LINUX_CAPABILITY_VERSION_3, 0};
 	struct __user_cap_data_struct cap_d[2] = {{0}};
-	if (syscall(SYS_capget, &cap_h, (cap_user_data_t) &cap_d)) return "capget";
+	if (ctrtool_syscall_errno(SYS_capget, errno_ptr, &cap_h, (cap_user_data_t) &cap_d, 0, 0, 0, 0)) return "capget";
 	uint64_t current_permitted = ((uint64_t) cap_d[1].permitted) << 32 | ((uint64_t) cap_d[0].permitted);
 	uint64_t current_inheritable = ((uint64_t) cap_d[1].inheritable) << 32 | ((uint64_t) cap_d[0].inheritable);
 	
@@ -179,7 +193,7 @@ static const char *child_func(struct child_data *data) {
 	cap_h.version = _LINUX_CAPABILITY_VERSION_3;
 	cap_h.pid = 0;
 
-	if (syscall(SYS_capset, &cap_h, (cap_user_data_t) &cap_d)) return "capset";
+	if (ctrtool_syscall_errno(SYS_capset, errno_ptr, &cap_h, (cap_user_data_t) &cap_d, 0, 0, 0, 0)) return "capset";
 
 	/* step 5: change uid/gid with keepcaps enabled */
 	if (!data->no_setgroups && setgroups(0, NULL)) return "setgroups";
@@ -189,7 +203,7 @@ static const char *child_func(struct child_data *data) {
 		if (setresuid(data->uid, data->uid, data->uid)) return "setuid";
 		/* setuid clears effective set but not permitted, try to restore those capabilities if possible */
 		if (data->set_inheritable || data->keepcaps) {
-			if (syscall(SYS_capset, &cap_h, (cap_user_data_t) &cap_d)) return "capset";
+			if (ctrtool_syscall_errno(SYS_capset, errno_ptr, &cap_h, (cap_user_data_t) &cap_d, 0, 0, 0, 0)) return "capset";
 		}
 	}
 
@@ -205,8 +219,8 @@ static const char *child_func(struct child_data *data) {
 	if (data->set_bounding) {
 		for (int i = 0; i < 64; i++) {
 			int r = prctl(PR_CAPBSET_READ, i, 0, 0, 0);
-			if ((r == -1) && (errno == EINVAL)) break;
-			if (r == -1) return "PR_CAPBSET_READ";
+			if ((r < 0) && (errno == EINVAL)) break;
+			if (r < 0) return "PR_CAPBSET_READ";
 			if (r == 1) {
 				if (!(data->bounding_caps & (1ULL << i))) {
 					if (prctl(PR_CAPBSET_DROP, i, 0, 0, 0)) return "PR_CAPBSET_DROP";
@@ -248,19 +262,19 @@ static const char *child_func(struct child_data *data) {
 		/* EVERYTHING BELOW HERE IS ASSUMED TO BE EXTREMELY DANGEROUS SINCE THE ROOT FS HAS CHANGED */
 		/* AND A MALICIOUS CONTAINER ROOTFS COULD ALLOW ACCESS TO THE HOST'S ROOT FS */
 		/* (ref: https://nvd.nist.gov/vuln/detail/CVE-2019-14271) */
-		if (syscall(SYS_pivot_root, ".", ".")) return "!pivot_root";
+		if (ctrtool_syscall_errno(SYS_pivot_root, errno_ptr, ".", ".", 0, 0, 0, 0)) return "!pivot_root";
 	}
 	/* step 10: mount /proc */
-	if ((data->mount_proc & 1) && syscall(SYS_mount, "none", "/proc", "proc", MS_NOSUID|MS_NODEV|MS_NOEXEC, NULL)) return "!mount /proc";
+	if ((data->mount_proc & 1) && ctrtool_syscall_errno(SYS_mount, errno_ptr, "none", "/proc", "proc", MS_NOSUID|MS_NODEV|MS_NOEXEC, NULL, 0)) return "!mount /proc";
 
 	/* step 11: umount old root */
 	if (data->pivot_root_dir) {
-		if (syscall(SYS_umount2, ".", MNT_DETACH)) return "!umount -l .";
+		if (ctrtool_syscall_errno(SYS_umount2, errno_ptr, ".", MNT_DETACH, 0, 0, 0, 0)) return "!umount -l .";
 	}
 	/* step 11.5: process nsenter post requests */
 	for (int i = 0; i < NSENTER_REQUESTS_MAX; i++) {
 		if (!nsenter_post_requests[i]) break;
-		switch (cl_nsenter_params(nsenter_post_requests[i])) {
+		switch (cl_nsenter_params(nsenter_post_requests[i], errno_ptr)) {
 			case 0:
 				break;
 			case -2:
@@ -273,27 +287,28 @@ static const char *child_func(struct child_data *data) {
 	}
 	/* step 12: redirect stderr/stdout */
 	if (data->log_fd != -1) {
-		if (syscall(SYS_dup3, data->log_fd, 1, 0) != 1) return "!dup3";
-		if (syscall(SYS_dup3, data->log_fd, 2, 0) != 2) return "!dup3";
-		syscall(SYS_close, data->log_fd);
+		if (ctrtool_syscall_errno(SYS_dup3, errno_ptr, data->log_fd, 1, 0, 0, 0, 0) != 1) return "!dup3";
+		if (ctrtool_syscall_errno(SYS_dup3, errno_ptr, data->log_fd, 2, 0, 0, 0, 0) != 2) return "!dup3";
+		ctrtool_syscall_errno(SYS_close, errno_ptr, data->log_fd, 0, 0, 0, 0, 0);
 	}
 	/* step 13: fork mode */
 	if (data->fork_mode) {
-		pid_t child_pid = fork();
-		if (child_pid == -1) {
+		pid_t child_pid = ctrtool_clone_onearg(SIGCHLD);
+		if (child_pid < 0) {
+			*errno_ptr = -child_pid;
 			return "!fork";
 		} else if (child_pid == 0) {
 			return NULL;
 		}
 		if (data->fork_mode == 2) {
-			_exit(0);
+			ctrtool_exit(0);
 		}
 start_wait:;
 	   	int wait_status = 0;
-		if (waitpid(child_pid, &wait_status, 0) != child_pid) {
-			if (errno == EINTR) goto start_wait;
+		if (ctrtool_syscall_errno(SYS_wait4, errno_ptr, child_pid, &wait_status, 0, 0, 0, 0) != child_pid) {
+			if (*errno_ptr == EINTR) goto start_wait;
 		}
-		_exit(WIFEXITED(wait_status) ? WEXITSTATUS(wait_status) : (WIFSIGNALED(wait_status) ? (128 + WTERMSIG(wait_status)) : 255));
+		ctrtool_exit(WIFEXITED(wait_status) ? WEXITSTATUS(wait_status) : (WIFSIGNALED(wait_status) ? (128 + WTERMSIG(wait_status)) : 255));
 	}
 	return NULL;
 }
@@ -310,6 +325,7 @@ int ctr_scripts_container_launcher_main(int argc, char **argv) {
 	data_to_process.log_fd = -1;
 	data_to_process.exec_fd = -1;
 	data_to_process.mount_propagation = 0;
+	data_to_process.close_fds.elem_size = sizeof(int);
 	int mount_propagation = MS_BIND; /* a nonsensical value */
 	int userns_fd = -1;
 	uid_t owner_uid = -1;
@@ -331,6 +347,7 @@ int ctr_scripts_container_launcher_main(int argc, char **argv) {
 	size_t gid_map_strlen = 0;
 	int deny_setgroups = 0;
 	int do_pidfd = 0;
+	int errno_ptr = 0;
 	size_t current_nsenter_point = 0;
 	size_t current_nsenter_post_point = 0;
 	/* TODO: long options */
@@ -339,6 +356,7 @@ int ctr_scripts_container_launcher_main(int argc, char **argv) {
 		{"bounding-caps", required_argument, NULL, 'b'},
 		{"cgroup", no_argument, NULL, 'C'},
 		{"clearenv", no_argument, NULL, 'V'},
+		{"close-fd", required_argument, NULL, 70013},
 		{"disable-setgroups", no_argument, NULL, 70006},
 		{"emptyfile", required_argument, NULL, 'M'},
 		{"exec-anon-fd", no_argument, NULL, 70008},
@@ -650,6 +668,25 @@ invalid_propagation:
 			case 70012:
 				data_to_process.fork_mode = 2;
 				break;
+			case 70013:
+				{
+					uint64_t fd_to_close = -1;
+					convert_uint64(optarg, &fd_to_close);
+					if (fd_to_close > INT_MAX) {
+						fputs("Number too large\n", stderr);
+						return 1;
+					}
+					int fd_num = fd_to_close;
+					if (fcntl(fd_num, F_GETFD, 0) < 0) {
+						perror("fcntl");
+						return 1;
+					}
+					if (ctrtool_arraylist_expand(&data_to_process.close_fds, &fd_num, 10)) {
+						perror("ctrtool_arraylist_expand");
+						return 1;
+					}
+				}
+				break;
 			default:
 				fprintf(stderr, "Usage: %s [-flags] [program] [arguments]\n"
 						"-C     new cgroup namespace\n"
@@ -783,16 +820,16 @@ invalid_propagation:
 		}
 		for (int i = 0; i < NSENTER_REQUESTS_MAX; i++) {
 			if (!nsenter_requests[i]) break;
-			switch (cl_nsenter_params(nsenter_requests[i])) {
+			switch (cl_nsenter_params(nsenter_requests[i], &errno_ptr)) {
 				case 0:
 					break;
 				case -2:
-					ctrtool_cheap_perror("cannot read nsenter argument", errno);
-					_exit(1);
+					ctrtool_cheap_perror("cannot read nsenter argument", errno_ptr);
+					ctrtool_exit(1);
 					break;
 				default:
-					ctrtool_cheap_perror("nsenter failed", errno);
-					_exit(1);
+					ctrtool_cheap_perror("nsenter failed", errno_ptr);
+					ctrtool_exit(1);
 					break;
 			}
 		}
@@ -801,23 +838,27 @@ invalid_propagation:
 		data_to_process.notify_parent_fd = -1;
 		data_to_process.wait_fd = -1;
 		data_to_process.log_fd = -1;
-		const char *r = child_func(&data_to_process);
+		const char *r = child_func(&data_to_process, &errno_ptr);
 		if (r) {
 			if (r[0] == '!') {
-				ctrtool_cheap_perror(&r[1], errno);
+				ctrtool_cheap_perror(&r[1], errno_ptr);
 				_exit(1);
 			}
+			if (errno_ptr) errno = errno_ptr;
 			perror(r);
 			exit(1);
 		}
+		errno_ptr = 0;
 		if (data_to_process.exec_fd >= 0) {
-			syscall(SYS_execveat, data_to_process.exec_fd, "", &argv[optind], environ, AT_EMPTY_PATH, 0);
+			ctrtool_syscall_errno(SYS_execveat, &errno_ptr, data_to_process.exec_fd, "", &argv[optind], environ, AT_EMPTY_PATH, 0);
 		} else if (data_to_process.exec_file) {
-			syscall(SYS_execve, data_to_process.exec_file, &argv[optind], environ, 0, 0, 0);
+			ctrtool_syscall_errno(SYS_execve, &errno_ptr, data_to_process.exec_file, &argv[optind], environ, 0, 0, 0);
 		} else {
 			execvp(argv[optind], &argv[optind]);
+			errno_ptr = errno;
 		}
-		exit(127);
+		ctrtool_cheap_perror("exec failed", errno_ptr);
+		ctrtool_exit(127);
 		return 127;
 	}
 	if (!do_exec_script) {
@@ -829,7 +870,7 @@ invalid_propagation:
 	int lockfile_fd = -1;
 	if (lockfile) {
 		lockfile_fd = open(lockfile, O_RDWR|O_CREAT|O_CLOEXEC, 0600);
-		if (lockfile_fd == -1) {
+		if (lockfile_fd < 0) {
 			perror(lockfile);
 			return 1;
 		}
@@ -863,7 +904,7 @@ invalid_propagation:
 	int log_fd = -1;
 	if (logfile) {
 		log_fd = open(logfile, O_WRONLY|O_APPEND|O_CREAT, 0600);
-		if (log_fd == -1) {
+		if (log_fd < 0) {
 			perror(logfile);
 			return 1;
 		}
@@ -881,22 +922,23 @@ invalid_propagation:
 	}
 	for (int i = 0; i < NSENTER_REQUESTS_MAX; i++) {
 		if (!nsenter_requests[i]) break;
-		switch (cl_nsenter_params(nsenter_requests[i])) {
+		switch (cl_nsenter_params(nsenter_requests[i], &errno_ptr)) {
 			case 0:
 				break;
 			case -2:
-				ctrtool_cheap_perror("cannot read nsenter argument", errno);
-				_exit(1);
+				ctrtool_cheap_perror("cannot read nsenter argument", errno_ptr);
+				ctrtool_exit(1);
 				break;
 			default:
-				ctrtool_cheap_perror("nsenter failed", errno);
-				_exit(1);
+				ctrtool_cheap_perror("nsenter failed", errno_ptr);
+				ctrtool_exit(1);
 				break;
 		}
 	}
 	/* TODO: clone3, int $0x80 on x86 */
-	long clone_result = syscall(SYS_clone, clone_flags|SIGCHLD, 0, 0, 0, 0);
+	long clone_result = ctrtool_clone_onearg(clone_flags|SIGCHLD);
 	if (clone_result < 0) {
+		errno = -clone_result;
 		perror("clone()");
 		return 1;
 	}
@@ -904,7 +946,7 @@ invalid_propagation:
 		if (hostname) {
 			if (sethostname(hostname, strlen(hostname))) {
 				perror("sethostname");
-				_exit(1);
+				ctrtool_exit(1);
 			}
 		}
 		close(pipe_to_child[1]);
@@ -916,26 +958,30 @@ invalid_propagation:
 		data_to_process.notify_parent_fd = pipe_from_child[1];
 		data_to_process.wait_fd = pipe_to_child[0];
 		data_to_process.log_fd = log_fd;
-		const char *r = child_func(&data_to_process);
+		const char *r = child_func(&data_to_process, &errno_ptr);
 		if (r) {
 			if (r[0] == '!') {
-				ctrtool_cheap_perror(&r[1], errno);
-				syscall(SYS_exit, 1);
-				_exit(1);
+				ctrtool_cheap_perror(&r[1], errno_ptr);
+				ctrtool_exit(1);
 			}
+			if (errno_ptr) errno = errno_ptr;
 			perror(r);
-			_exit(1);
+			ctrtool_exit(1);
 		}
+		errno_ptr = 0;
 		if (data_to_process.exec_fd >= 0) {
-			syscall(SYS_execveat, data_to_process.exec_fd, "", &argv[optind], environ, AT_EMPTY_PATH, 0);
+			ctrtool_syscall_errno(SYS_execveat, &errno_ptr, data_to_process.exec_fd, "", &argv[optind], environ, AT_EMPTY_PATH, 0);
 		} else if (data_to_process.exec_file) {
-			syscall(SYS_execve, data_to_process.exec_file, &argv[optind], environ, 0, 0, 0);
+			ctrtool_syscall_errno(SYS_execve, &errno_ptr, data_to_process.exec_file, &argv[optind], environ, 0, 0, 0);
 		} else {
 			execvp(argv[optind], &argv[optind]);
+			errno_ptr = errno;
 		}
-		_exit(127);
+		ctrtool_cheap_perror("exec failed", errno_ptr);
+		ctrtool_exit(127);
 		return 127;
 	}
+	free(data_to_process.close_fds.start);
 	close(pipe_to_child[0]);
 	close(pipe_from_child[1]);
 	close(socketpair_to_child[1]);
@@ -953,7 +999,7 @@ invalid_propagation:
 	char c_buf5[100] = {0};
 	if (snprintf(c_buf1, sizeof(c_buf1), "/proc/%lu", clone_result) <= 0) return 1;
 	int proc_pid_dir = open(c_buf1, O_RDONLY|O_DIRECTORY|O_NOFOLLOW);
-	if (proc_pid_dir == -1) {
+	if (proc_pid_dir < 0) {
 		perror("open /proc/pid");
 		return 1;
 	}
@@ -972,7 +1018,7 @@ invalid_propagation:
 		fprintf(stderr, "pidfd_open not supported with the current kernel headers!\n");
 		return 1;
 #endif
-		if (pid_fd == -1) {
+		if (pid_fd < 0) {
 			perror("pidfd_open");
 			return 1;
 		}
@@ -994,7 +1040,7 @@ invalid_propagation:
 	if (emptyfile) {
 		errno = 0;
 		int emptyfile_fd = open(emptyfile, O_RDONLY|O_CLOEXEC);
-		if (emptyfile_fd == -1) {
+		if (emptyfile_fd < 0) {
 			if (errno == ESRCH) {
 				/* This is if the /proc/PID directory was bind-mounted and the emptyfile was /proc/PID/status or similar. */
 				goto no_emptyfile;
@@ -1014,7 +1060,7 @@ no_emptyfile:;
 	size_t pid_strlen = strlen(pid_string);
 	for (struct pid_file *in_pid = pidfile_list; in_pid;) {
 		int my_file = open(in_pid->filename, O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666);
-		if (my_file == -1) {
+		if (my_file < 0) {
 			perror(in_pid->filename);
 			return 1;
 		}
@@ -1034,7 +1080,7 @@ no_emptyfile:;
 	/* write uid/gid maps and deny setgroups */
 	if (deny_setgroups) {
 		int setgroups_fd = openat(proc_pid_dir, "setgroups", O_WRONLY|O_NONBLOCK|O_CLOEXEC);
-		if (setgroups_fd == -1) {
+		if (setgroups_fd < 0) {
 			perror("open /proc/PID/setgroups");
 			return 1;
 		}
@@ -1046,7 +1092,7 @@ no_emptyfile:;
 	}
 	if (uid_map_str) {
 		int uid_map_fd = openat(proc_pid_dir, "uid_map", O_WRONLY|O_NONBLOCK|O_CLOEXEC);
-		if (uid_map_fd == -1) {
+		if (uid_map_fd < 0) {
 			perror("open /proc/PID/uid_map");
 			return 1;
 		}
@@ -1058,7 +1104,7 @@ no_emptyfile:;
 	}
 	if (gid_map_str) {
 		int gid_map_fd = openat(proc_pid_dir, "gid_map", O_WRONLY|O_NONBLOCK|O_CLOEXEC);
-		if (gid_map_fd == -1) {
+		if (gid_map_fd < 0) {
 			perror("open /proc/PID/gid_map");
 			return 1;
 		}
@@ -1074,12 +1120,12 @@ no_emptyfile:;
 		}
 		if (lockfile_fd != -1) {
 			int fl = fcntl(lockfile_fd, F_GETFD);
-			if (fl == -1) return 1;
+			if (fl < 0) return 1;
 			if (fcntl(lockfile_fd, F_SETFD, ~(FD_CLOEXEC) & fl)) return 1;
 		}
 		if (pipe_to_child[1] != -1) {
 			int fl = fcntl(pipe_to_child[1], F_GETFD);
-			if (fl == -1) return 1;
+			if (fl < 0) return 1;
 			if (fcntl(pipe_to_child[1], F_SETFD, ~(FD_CLOEXEC) & fl)) return 1;
 		}
 		char *my_argv[] = {script_file, &c_buf1[6], c_buf2, c_buf3, c_buf4, c_buf5, NULL, NULL, NULL, NULL};
@@ -1101,7 +1147,7 @@ no_emptyfile:;
 	if (script_file) {
 		/* step 2: run the script */
 		pid_t script_pid = fork();
-		if (script_pid == -1) {
+		if (script_pid < 0) {
 			perror("fork() script");
 			return 1;
 		}
@@ -1126,7 +1172,7 @@ no_emptyfile:;
 			if (wait_for_pid == script_pid) {
 				break;
 			}
-			if ((wait_for_pid == -1) && (errno == EINTR)) continue;
+			if ((wait_for_pid < 0) && (errno == EINTR)) continue;
 			return 1;
 		}
 		int my_exit_status = 127;
@@ -1152,7 +1198,7 @@ no_emptyfile:;
 			if (wait_for_pid == clone_result) {
 				break;
 			}
-			if ((wait_for_pid == -1) && (errno == EINTR)) continue;
+			if ((wait_for_pid < 0) && (errno == EINTR)) continue;
 			return 1;
 		}
 		if (WIFEXITED(wait_status)) {

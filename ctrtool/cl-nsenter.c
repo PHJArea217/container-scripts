@@ -1,26 +1,28 @@
 #define _GNU_SOURCE
+#include "ctrtool-common.h"
 #include <sched.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <ctype.h>
 #include <stdlib.h>
-static int cl_enter_proc(int proc_fd, const char *name, int nstype, int req_mask, int close_proc_fd) {
+#include <syscall.h>
+static int cl_enter_proc(int proc_fd, const char *name, int nstype, int req_mask, int close_proc_fd, int *errno_ptr) {
 	if (!(req_mask & nstype)) {
 		if (close_proc_fd) {
-			close(proc_fd);
+			ctrtool_syscall(SYS_close, proc_fd, 0, 0, 0, 0, 0);
 		}
 		return 0;
 	}
-	int fd = openat(proc_fd, name, O_RDONLY|O_CLOEXEC|O_NONBLOCK|O_NOCTTY);
+	int fd = ctrtool_syscall_errno(SYS_openat, errno_ptr, proc_fd, name, O_RDONLY|O_CLOEXEC|O_NONBLOCK|O_NOCTTY, 0, 0, 0);
 	if (close_proc_fd) {
-		close(proc_fd);
+		ctrtool_syscall(SYS_close, proc_fd, 0, 0, 0, 0, 0);
 	}
 	if (fd < 0) return -1;
-	int return_value = setns(fd, nstype);
-	close(fd);
+	int return_value = ctrtool_syscall_errno(SYS_setns, errno_ptr, fd, nstype, 0, 0, 0, 0);
+	ctrtool_syscall(SYS_close, fd, 0, 0, 0, 0, 0);
 	return -!!return_value;
 }
-int cl_nsenter_params(const char *param) {
+int cl_nsenter_params(const char *param, int *errno_ptr) {
 	int flags = 0;
 	const char *p = param;
 	int fd = -1;
@@ -72,12 +74,12 @@ int cl_nsenter_params(const char *param) {
 				fd = atoi(env_value);
 				goto end_while;
 			case '=':
-				fd = open(&p[1], O_RDONLY|O_CLOEXEC|O_NONBLOCK|O_NOCTTY);
+				fd = ctrtool_syscall_errno(SYS_openat, errno_ptr, AT_FDCWD, &p[1], O_RDONLY|O_CLOEXEC|O_NONBLOCK|O_NOCTTY, 0, 0, 0);
 				if (fd == -1) return -1;
 				fd_type = 1;
 				goto end_while;
 			case '/':
-				fd = open(&p[1], O_RDONLY|O_CLOEXEC|O_NONBLOCK|O_NOCTTY|O_DIRECTORY);
+				fd = ctrtool_syscall_errno(SYS_openat, errno_ptr, AT_FDCWD, &p[1], O_RDONLY|O_CLOEXEC|O_NONBLOCK|O_NOCTTY|O_DIRECTORY, 0, 0, 0);
 				if (fd == -1) return -1;
 				fd_type = 2;
 				goto end_while;
@@ -90,22 +92,22 @@ end_while:
 	switch (fd_type) {
 		case 0:
 			;
-			int rv = -!!setns(fd, flags);
-			if (close_fd) close(fd);
+			int rv = -!!ctrtool_syscall_errno(SYS_setns, errno_ptr, fd, flags, 0, 0, 0, 0);
+			if (close_fd) ctrtool_syscall(SYS_close, fd, 0, 0, 0, 0, 0);
 			return rv;
 		case 1:
 			;
-			int return_value = -!!setns(fd, flags);
+			int return_value = -!!ctrtool_syscall_errno(SYS_setns, errno_ptr, fd, flags, 0, 0, 0, 0);
 			close(fd);
 			return return_value;
 		case 2:
-			if (cl_enter_proc(fd, "ns/user", CLONE_NEWUSER, flags, 0)) return -1;
-			if (cl_enter_proc(fd, "ns/cgroup", CLONE_NEWCGROUP, flags, 0)) return -1;
-			if (cl_enter_proc(fd, "ns/ipc", CLONE_NEWIPC, flags, 0)) return -1;
-			if (cl_enter_proc(fd, "ns/net", CLONE_NEWNET, flags, 0)) return -1;
-			if (cl_enter_proc(fd, "ns/uts", CLONE_NEWUTS, flags, 0)) return -1;
-			if (cl_enter_proc(fd, "ns/pid", CLONE_NEWPID, flags, 0)) return -1;
-			if (cl_enter_proc(fd, "ns/mnt", CLONE_NEWNS, flags, 1)) return -1;
+			if (cl_enter_proc(fd, "ns/user", CLONE_NEWUSER, flags, 0, errno_ptr)) return -1;
+			if (cl_enter_proc(fd, "ns/cgroup", CLONE_NEWCGROUP, flags, 0, errno_ptr)) return -1;
+			if (cl_enter_proc(fd, "ns/ipc", CLONE_NEWIPC, flags, 0, errno_ptr)) return -1;
+			if (cl_enter_proc(fd, "ns/net", CLONE_NEWNET, flags, 0, errno_ptr)) return -1;
+			if (cl_enter_proc(fd, "ns/uts", CLONE_NEWUTS, flags, 0, errno_ptr)) return -1;
+			if (cl_enter_proc(fd, "ns/pid", CLONE_NEWPID, flags, 0, errno_ptr)) return -1;
+			if (cl_enter_proc(fd, "ns/mnt", CLONE_NEWNS, flags, 1, errno_ptr)) return -1;
 			return 0;
 	}
 	return -1;
