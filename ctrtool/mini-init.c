@@ -309,7 +309,7 @@ static int ctr_scripts_mini_init_main_c(int argc, char **argv, int new_version) 
 		return 1;
 	}
 	if (fd_share_mode) {
-		int test_fd = socket(AF_UNIX, SOCK_STREAM, 0);
+		int test_fd = socket(AF_UNIX, SOCK_STREAM|SOCK_CLOEXEC, 0);
 		if (test_fd < 0) {
 			goto self_test_failed;
 		}

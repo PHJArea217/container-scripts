@@ -35,9 +35,11 @@ static struct opt_element boolean_values[] = {
 	{.name = "yes", .value = {.value = 1}}
 };
 static struct opt_element devfs_opts[] = {
-	{.name = "bind_host", .value = {.value = 0xaaaaaaaa}},
+	{.name = "bind_host", .value = {.value = 0x00000aaa}},
+	{.name = "bind_host_v2", .value = {.value = 0x00002aaa}},
 	{.name = "none", .value = {.value = 0}},
-	{.name = "symlink_host", .value = {.value = 0x55555555}}
+	{.name = "symlink_host", .value = {.value = 0x00000555}},
+	{.name = "symlink_host_v2", .value = {.value = 0x00001555}}
 };
 static struct opt_element root_link_opts[] = {
 	{.name = "all_dirs", .value = {.value = 0xffffffff}},
@@ -182,6 +184,7 @@ int ctr_scripts_container_rootfs_mount_main(int argc, char **argv) {
 	check_syscall(mkdir("proc", 0700), "mkdir /proc");
 	check_syscall(mkdir("sys", 0700), "mkdir /sys");
 	check_syscall(mkdir("dev", 0777), "mkdir /dev");
+	check_syscall(mkdir("dev/net", 0777), "mkdir /dev/net");
 	check_syscall(mkdir("dev/mqueue", 0700), "mkdir /dev/mqueue");
 	check_syscall(mkdir("dev/pts", 0700), "mkdir /dev/pts");
 	check_syscall(mkdir("run", 0777), "mkdir /run");
@@ -232,9 +235,9 @@ int ctr_scripts_container_rootfs_mount_main(int argc, char **argv) {
 				break;
 		}
 	}
-	const char *dev_symlinks[] = {"/dev/full", "/dev/null", "/dev/random", "/dev/tty", "/dev/urandom", "/dev/zero"};
-	const char *dev_symlinks_c[] = {"_host/full", "_host/null", "_host/random", "_host/tty", "_host/urandom", "_host/zero"};
-	for (int i = 0; i < 6; i++) {
+	const char *dev_symlinks[] = {"/dev/full", "/dev/null", "/dev/random", "/dev/tty", "/dev/urandom", "/dev/zero", "/dev/net/tun"};
+	const char *dev_symlinks_c[] = {"_host/full", "_host/null", "_host/random", "_host/tty", "_host/urandom", "_host/zero", "../_host/net/tun"};
+	for (int i = 0; i < 7; i++) {
 		const char *my_value = dev_symlinks[i];
 		uint8_t my_opt = (dev_opts >> (2 * i)) & 3;
 		switch(my_opt) {

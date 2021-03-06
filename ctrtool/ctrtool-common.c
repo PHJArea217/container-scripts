@@ -11,6 +11,8 @@
 #include <syscall.h>
 #include <unistd.h>
 #include <limits.h>
+#include <dirent.h>
+#include <ctype.h>
 #include <fcntl.h>
 static int int32_to_num(uint32_t num, char *result) {
 	static char digits[] = "0123456789";
@@ -86,6 +88,49 @@ int ctrtool_install_seccomp_from_fd(int fd, struct sock_fprog *result) {
 	result->filter = (struct sock_filter *) buffer;
 	return 0;
 }
+int ctrtool_close_range_compat(int min_fd, int max_fd, unsigned int flags) {
+	if (flags) {
+		errno = EINVAL;
+		return -1;
+	}
+	struct ctrtool_arraylist fd_list = {0};
+	fd_list.elem_size = sizeof(int);
+	DIR *proc_pid_dir = opendir("/proc/self/fd");
+	if (proc_pid_dir == NULL) {
+		return -1;
+	}
+	while (1) {
+		errno = 0;
+		struct dirent *e = readdir(proc_pid_dir);
+		if (!e) break;
+		if (isdigit(e->d_name[0])) {
+			int fd_number = atoi(e->d_name);
+			if ((fd_number >= min_fd) && (fd_number <= max_fd)) {
+				if (ctrtool_arraylist_expand(&fd_list, &fd_number, 10)) {
+					errno = ENOMEM;
+					break;
+				}
+			}
+		}
+	}
+	if (errno) {
+		if (closedir(proc_pid_dir)) {
+			abort();
+		}
+		free(fd_list.start);
+		return -1;
+	}
+	if (closedir(proc_pid_dir)) {
+		abort();
+	}
+	int *fd_list_i = fd_list.start;
+	for (size_t i = 0; i < fd_list.nr; i++) {
+		close(fd_list_i[i]);
+	}
+	free(fd_list.start);
+	errno = 0;
+	return 0;
+}
 int ctrtool_close_range(int min_fd, int max_fd, unsigned int flags) {
 	if (min_fd < 0) {
 		errno = EINVAL;
@@ -95,14 +140,17 @@ int ctrtool_close_range(int min_fd, int max_fd, unsigned int flags) {
 		errno = EINVAL;
 		return -1;
 	}
-#ifdef SYS_close_range
-	return syscall(SYS_close_range, min_fd, max_fd, flags, 0, 0, 0);
-#elif defined(__x86_64__) || defined(__i386__)
-	return syscall(436, min_fd, max_fd, flags, 0, 0, 0);
-#else
+	int rv = -1;
 	errno = ENOSYS;
-	return -1;
+#ifdef SYS_close_range
+	rv = syscall(SYS_close_range, min_fd, max_fd, flags, 0, 0, 0);
+#elif defined(__x86_64__) || defined(__i386__)
+	rv = syscall(436, min_fd, max_fd, flags, 0, 0, 0);
 #endif
+	if ((rv < 0) && (errno == ENOSYS)) {
+		return ctrtool_close_range_compat(min_fd, max_fd, flags);
+	}
+	return rv;
 }
 /* TODO: Maybe make the "3" customizable? */
 void ctrtool_mini_init_set_fds(int *fds, size_t num_fds) {

@@ -6,6 +6,7 @@ ctrtool_arch_x86_64_syscall_r:
 	syscall
 	ret
 ctrtool_arch_x86_64_exit:
+	endbr64
 	xor %rax, %rax
 	mov $60, %al
 	syscall

@@ -55,7 +55,7 @@ static int search_command(const char *base_command, int argc, char **argv) {
 }
 int main(int argc, char **argv) {
 	while (1) {
-		int dummy_socket = socket(AF_UNIX, SOCK_STREAM, 0);
+		int dummy_socket = socket(AF_UNIX, SOCK_STREAM|SOCK_CLOEXEC, 0);
 		if (dummy_socket == -1) return 1;
 		if (dummy_socket >= 3) {
 			close(dummy_socket);
