@@ -1,0 +1,101 @@
+.TH CONTAINER-LAUNCHER 1CTRTOOL 2021-03-06 "peterjin.org" "Ctrtool"
+.SH NAME
+container-launcher \- Create Linux containers
+.SH SYNOPSIS
+.B ctrtool
+.B launcher
+[ OPTIONS ] [--] [ PROGRAM ] [ ARGUMENTS ]
+.SH DESCRIPTION
+\fBctrtool launcher\fP is a utility used to create new Linux containers, using Linux namespaces. It handles all the heavy lifting of creating Linux containers, while also allowing great flexiblity as to the nature of the container.
+.PP
+\fBctrtool launcher\fP is not a replacement for LXC, Docker, Podman, or similar container runtimes. Instead, it is more like \fBrunc\fP(8), which creates containers directly, but with a much greater variety of possible options.
+.PP
+\fBctrtool launcher\fP supports both traditional "root" modes as well as "rootless" modes, and is designed to support both of those modes equally well.
+.SH OPTIONS
+\fBctrtool\fP has a variety of options. Most of them are used to experiment with different modes of operation that a Linux container can have.
+.TP
+.B -C, --cgroup
+Create the container with the cgroup namespace unshared. If not set, the host's cgroup namespace will be used. The creation of the cgroup namespace is actually delayed until the script specified by --script terminates, to allow the container to be put into a cgroup before the namespace is created.
+.TP
+.B -i, --ipc
+Create the container with the ipc namespace unshared. If not set, the host's ipc namespace will be used.
+.TP
+.B -m, --mount
+Create the container with the mount namespace unshared. If not set, the host's mount namespace will be used.
+.TP
+.B -n, --network
+Create the container with the network namespace unshared. If not set, the host's network namespace will be used.
+.TP
+.B -p, --pid
+Create the container with the PID namespace unshared. If not set, the host's PID namespace will be used.
+.TP
+.B -U, --user
+Create the container with the user namespace unshared. If not set, the host's user namespace will be used.
+.TP
+.B -u, --uts
+Create the container with the UTS namespace unshared. If not set, the host's UTS namespace will be used.
+.TP
+.B -S, --uid
+Set the initial user ID of the process running in the container. If not set, UID 0 will be assumed.
+This option does not accept a user name, as \fBctrtool launcher\fP cannot reliably determine the contents of /etc/passwd within the container.
+.TP
+.B -G, --gid
+Set the initial group ID of the process running in the container. If not set, GID 0 will be assumed.
+This option does not accept a group name, as \fBctrtool launcher\fP cannot reliably determine the contents of /etc/group within the container.
+.TP
+.B -g, --no-clear-groups
+Do not call setgroups(0, NULL) within the container. This option is required if the container needs access to group IDs outside the container's group ID map, or if --disable-setgroups is used.
+.TP
+.B -N, --no-set-id
+Do not set user or group IDs within the container.
+.TP
+.B -s, --setsid
+Call \fBsetsid\fP(2) to detach the container process from the host terminal.
+.TP
+.B -w, --wait
+Wait for the container to exit. Return code is the same as the exit code from the container's main process.
+.TP
+.B -x, --script
+Run this script to configure the container. This script can do a variety of things, from configuring network interfaces to setting up mount points. The script takes three arguments: \fI$1\fP will be the process ID of the container's main process, \fI$2\fP will be a file descriptor to the /proc/PID directory of that process, and \fI$3\fP will be the file descriptor number of the Unix domain socket pair if --socketpair is used (otherwise it is -1).
+.TP
+.B -I, --inh-caps
+Set the inheritable capabilities of the container's main process. Currently, only a number (hex or decimal) as a shifted bit mask of capabilities (like with \fICap???\fP in \fI/proc/PID/status\fP) is accepted. See \fBcapabilities\fP(7) for more information.
+.TP
+.B -k, --inh-all
+Set the inheritable capabilities to the same as the permitted set.
+.TP
+.B -a, --ambient-caps
+Set the ambient capabilities of the container's main process. Currently, only a number (hex or decimal) is accepted. These capabilities must already be in the inheritable set (use --inh-caps in conjunction with this option if this is not the case). See \fBcapabilities\fP(7) for more information. If the argument is \(aqinherit\(aq, then the ambient capabilities are set to the same as the inheritable set.
+.TP
+.B -b, --bounding-caps
+Set the capability bounding set of the container's main process. Currently, only a number (hex or decimal) is accepted. These capabilities are used to limit the capabilities of root processes in the container, in the same way that --cap-add/--cap-drop would be used in Docker.
+.TP
+.B -f, --userns-fd
+Instead of running the normal routine, enter the user namespace specified by the file descriptor number argument. No process will be forked. If the argument is 'i', no user namespace switch will be done (this may be dangerous, depending on the circumstances)
+.TP
+.B -B, --securebits
+Set the securebits of the process running in the container. Currently, only a number is supported, as produced by \fIcapsh --print\fP. See \fBcapabilities\fP(7) for more information.
+.TP
+.B -O, --owner-uid
+Set the owner UID of the user namespace created by the -U option. With this option set, a process in the current user namespace whose user ID is equal to this owner UID will have full privileges in that user namespace (and therefore any other namespace that is owned by that user namespace).
+.TP
+.B -t, --mount-proc
+Mount the /proc filesystem in the container. If used with --pivot-root, the /proc filesystem is mounted immediately after the pivot_root operation but before the umount operation.
+.TP
+.B -E, --unsafe
+Allow unsafe operations (e.g. setting hostname without --uts or mounting /proc with shared propagation or without creating a mount namespace)
+.TP
+.B -R, --propagation
+Set the mount propagation (shared, slave, private, unchanged). This operation is performed before the script executes.
+.TP
+.B -L, --log-file
+Redirect the standard input to /dev/null and the standard output and error to the specified log file (will be opened in append mode) inside the container.
+.TP
+.B -H, --hostname
+Set the container's hostname. This option must be used with -u; otherwise, the host's hostname might be changed.
+.TP
+.B -X, --socketpair
+Create a socketpair between the script and the container. With this socketpair the host and container can not only send data but can also send file descriptors between each other. This option takes an integer argument 1, 2, or 3, which requests a stream socket, datagram socket, or sequenced packet socket, respectively.
+.TP
+.B -d, --script-is-shell
+

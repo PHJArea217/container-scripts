@@ -1,0 +1,38 @@
+.TH CTRTOOL 1 2021-03-06 "peterjin.org" "Ctrtool"
+.SH NAME
+ctrtool \- Linux container management utility
+.SH SYNOPSIS
+.B ctrtool
+[ debug_shell | init | launcher | mount_seq | reset_cgroup | renameat2 | rootfs-mount | set_fds ] [ ... ]
+.SH DESCRIPTION
+.B ctrtool
+is a set of tools used to manage Linux containers (in the generic sense, not necessarily LXC).
+.PP
+ctrtool understands the following commands:
+.TP
+.B debug_shell
+A daemon that runs in a container to allow for debugging.
+.TP
+.B init
+An init daemon designed specifically for containers.
+.TP
+.B launcher
+An advanced container creation utility.
+.TP
+.B mount_seq
+Perform multiple mounts in sequence.
+.TP
+.B renameat2
+Simple wrapper for the \fBrenameat2\fP(2) system call.
+.TP
+.B reset_cgroup
+Changes the cgroup memberships for the calling process.
+.TP
+.B rootfs-mount
+Create a temporary, skeletal filesystem root tree for a container.
+.TP
+.B set_fds
+Rearranges the process's file descriptors.
+.PP
+For more information about these commands, see their respective manual pages in the 1ctrtool section.
+

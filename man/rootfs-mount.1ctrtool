@@ -1,0 +1,87 @@
+.TH CONTAINER-ROOTFS-MOUNT 1 2021-03-06 "peterjin.org" "Ctrtool"
+.SH NAME
+container-rootfs-mount \- Create a container root filesystem tree
+.SH SYNOPSIS
+.B ctrtool rootfs-mount
+[-o option=value ... ] [mountpoint]
+.SH DESCRIPTION
+.B ctrtool rootfs-mount
+creates a container root filesystem tree, mounted on the specified mountpoint for calling \fBpivot_root\fP(2) on later. This filesystem tree has a tmpfs root; see https://www.peterjin.org/wiki/Ctrtool for a detailed explanation and rationale.
+.PP
+This command is intended to be run from the script that \fBcontainer-launcher\fP(1ctrtool) executes, but also has uses on its own.
+.SH OPTIONS
+.TP
+\fB-o tmpfs_mount_opts=\fP (string, default "mode=0755")
+Set the mount options for the tmpfs root.
+.TP
+\fB-o umask=\fP (integer, default 022)
+Set the umask when creating files and/or directories.
+.TP
+\fB-o run_dirs=\fP (boolean, default true)
+Create the /run/lock and /run/shm directories, as well as a symlink from /dev/shm to /run/shm.
+.TP
+\fB-o tmp_world=\fP (boolean, default true)
+If true, the /tmp, /run/shm, and /run/lock directories are created as sticky world-writable directories.
+.TP
+\fB-o mount_mqueue=\fP (boolean, default true)
+If true, /dev/mqueue will be mounted. Setting this to false is useful if the IPC namespace of the container is the same as the host. Regardless of the value of this option, the /dev/mqueue directory itself is always created.
+.TP
+\fB-o mount_devpts=\fP (boolean, default true)
+If true, /dev/pts will be mounted with the \fI-o newinstance,mode=0600\fP mount option. Regardless of the value of this option, the /dev/pts directory itself is always created.
+.TP
+\fB-o mount_sysfs=\fP (boolean, default false)
+If true, /sys will be mounted. Regardless of the value of this option, the /sys directory itself is always created.
+.TP
+\fB-o root_symlink_usr=\fP (boolean, default false)
+If true, /bin, /lib, /lib32, /lib64, /libx32, and /sbin will be created as symlinks to the same directories in /usr if they originally would have pointed to /_fsroot_ro.
+.TP
+\fB-o root_link_opts=\fP (integer with enum, default all_rw)
+Specifies the disposition to take when creating directories in the root filesystem. There are 12 directories created using this option, namely /bin, /lib, /lib32, /lib64, /libx32, /opt, /sbin, and /usr (group 1) and /etc, /home, /root, and /var (group 2)
+.IP
+If this option is \fIall_dirs\fP, then all 12 root directories are created as actual directories.
+.IP
+If this option is \fIall_ro\fP, then all of those directories are created as symlinks to the same directory on /_fsroot_ro. Note that this is just a name for this directory and may not necessarily be read-only.
+.IP
+If this option is \fIall_rw\fP, then all of those directories are created as symlinks to the same directory on /_fsroot_rw.
+.IP
+If this option is \fIusr_ro\fP, then group 1 directories are created as symlinks to /_fsroot_ro, and group 2 directories are created as symlinks to /_fsroot_rw. This allows containers to have a read-only root filesystem while also maintaining proper state.
+.IP
+If this option is \fIusr_ro_tmp\fP, then group 1 directories are created as symlinks to /_fsroot_ro, and group 2 directories are created as actual directories.
+.IP
+If this option is \fIusr_rw_tmp\fP, then group 1 directories are created as symlinks to /_fsroot_rw, and group 2 directories are created as actual directories.
+.IP
+If this option is \fInone\fP, then none of those directories are created.
+.IP
+If this option is a number, then each group of 2 bits of it encodes the disposition of each directory: bits 0 and 1 encode the disposition for /bin, 2 and 3 for /lib, 4 and 5 for /lib32, 6 and 7 for /lib64, and so on. The encoding of each of those groups of two bits is interpreted according to the following rules:
+.IP
+If 0 (binary 00), the directory is not created.
+.IP
+If 1 (binary 01), the directory is created as a symlink to /_fsroot_ro.
+.IP
+If 2 (binary 10), the directory is created as a symlink to /_fsroot_rw.
+.IP
+If 3 (binary 11), the directory is created as an actual directory.
+.TP
+\fB-o dev_opts=\fP (integer with enum, default bind_host)
+Specify the disposition of creating device nodes in /dev. The device nodes created are /dev/full, /dev/null, /dev/random, /dev/tty, /dev/urandom, /dev/zero, and /dev/net/tun.
+.IP
+If this option is \fInone\fP, then no device nodes are created.
+.IP
+If this option is \fIsymlink_host\fP, then the device nodes are created as a symlink to /dev/_host. For example, /dev/null will be a symlink to /dev/_host/null. /dev/net/tun is not created.
+.IP
+If this option is \fIsymlink_host_v2\fP, then it is identical to \fIsymlink_host\fP, except that /dev/net/tun is also created.
+.IP
+If this option is \fIbind_host\fP, then the device nodes are created as a bind mount to the same devices on the host. /dev/net/tun is not created.
+.IP
+If this option is \fIbind_host_v2\fP, then it is identical to \fIbind_host\fP, except that /dev/net/tun is also created.
+.IP
+If this option is an integer, then bits 0 and 1 specify the disposition of /dev/full, 2 and 3 for /dev/null, and so on.
+.IP
+If 0 (binary 00), the device node is not created.
+.IP
+If 1 (binary 01), the device node is created as a symlink to /dev/_host.
+.IP
+If 2 (binary 10), the device node is created as a bind mount of the same device on the host.
+.IP
+Option 3 (binary 11) is invalid.
+
