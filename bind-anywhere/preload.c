@@ -10,7 +10,11 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/stat.h>
-
+#ifndef __NR_pidfd_getfd
+#if defined(__i386__) || defined(__x86_64__)
+#define __NR_pidfd_getfd 438
+#endif
+#endif
 static int getsockopt_integer(int fd, int level, int type) {
 	int result = -1;
 	socklen_t len = sizeof(int);
