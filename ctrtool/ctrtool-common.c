@@ -2,6 +2,7 @@
 #include "ctrtool-common.h"
 #include <linux/filter.h>
 #include <linux/seccomp.h>
+#include <sys/capability.h>
 #include <stdint.h>
 #include <string.h>
 #include <stdio.h>
@@ -222,5 +223,23 @@ int ctrtool_arraylist_expand(struct ctrtool_arraylist *list, const void *new_ele
 	}
 	memcpy(&((char *) list->start)[list->nr * list->elem_size], new_element, list->elem_size);
 	list->nr = new_list_size;
+	return 0;
+}
+int ctrtool_load_permitted_caps(void) {
+	struct __user_cap_header_struct cap_h = {_LINUX_CAPABILITY_VERSION_3, 0};
+	struct __user_cap_data_struct cap_d[2] = {0};
+
+	long sys_retval = ctrtool_syscall(SYS_capget, &cap_h, cap_d, 0, 0, 0, 0);
+	if (sys_retval) {
+		errno = -sys_retval;
+		return -1;
+	}
+	cap_d[0].effective = cap_d[0].permitted;
+	cap_d[1].effective = cap_d[1].permitted;
+	sys_retval = ctrtool_syscall(SYS_capset, &cap_h, cap_d, 0, 0, 0, 0);
+	if (sys_retval) {
+		errno = -sys_retval;
+		return -1;
+	}
 	return 0;
 }

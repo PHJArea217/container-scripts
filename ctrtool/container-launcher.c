@@ -881,6 +881,44 @@ invalid_propagation:
 		free(lockfile);
 		lockfile = NULL;
 	}
+	int log_fd = -1;
+	if (logfile) {
+		log_fd = open(logfile, O_WRONLY|O_APPEND|O_CREAT, 0600);
+		if (log_fd < 0) {
+			perror(logfile);
+			return 1;
+		}
+	}
+	free(logfile); logfile = NULL;
+	uid_t current_uids[3] = {0, 0, 0};
+	if (owner_uid != -1) {
+		if (getresuid(&current_uids[0], &current_uids[1], &current_uids[2])) return 1;
+		current_uids[2] = current_uids[1];
+		current_uids[1] = owner_uid;
+		if (setresuid(current_uids[0], current_uids[1], current_uids[2])) {
+			perror("setresuid");
+			return 1;
+		}
+		if (ctrtool_load_permitted_caps()) {
+			perror("ctrtool_load_permitted_caps");
+			return 1;
+		}
+	}
+	for (int i = 0; i < NSENTER_REQUESTS_MAX; i++) {
+		if (!nsenter_requests[i]) break;
+		switch (cl_nsenter_params(nsenter_requests[i], &errno_ptr)) {
+			case 0:
+				break;
+			case -2:
+				ctrtool_cheap_perror("cannot read nsenter argument", errno_ptr);
+				ctrtool_exit(1);
+				break;
+			default:
+				ctrtool_cheap_perror("nsenter failed", errno_ptr);
+				ctrtool_exit(1);
+				break;
+		}
+	}
 	int pipe_to_child[2] = {-1, -1};
 	int pipe_from_child[2] = {-1, -1};
 	int socketpair_to_child[2] = {-1, -1};
@@ -900,40 +938,6 @@ invalid_propagation:
 				break;
 		}
 		if (socketpair(AF_UNIX, the_type, 0, socketpair_to_child)) return 1;
-	}
-	int log_fd = -1;
-	if (logfile) {
-		log_fd = open(logfile, O_WRONLY|O_APPEND|O_CREAT, 0600);
-		if (log_fd < 0) {
-			perror(logfile);
-			return 1;
-		}
-	}
-	free(logfile); logfile = NULL;
-	uid_t current_uids[3] = {0, 0, 0};
-	if (owner_uid != -1) {
-		if (getresuid(&current_uids[0], &current_uids[1], &current_uids[2])) return 1;
-		current_uids[2] = current_uids[1];
-		current_uids[1] = owner_uid;
-		if (setresuid(current_uids[0], current_uids[1], current_uids[2])) {
-			perror("setresuid");
-			return 1;
-		}
-	}
-	for (int i = 0; i < NSENTER_REQUESTS_MAX; i++) {
-		if (!nsenter_requests[i]) break;
-		switch (cl_nsenter_params(nsenter_requests[i], &errno_ptr)) {
-			case 0:
-				break;
-			case -2:
-				ctrtool_cheap_perror("cannot read nsenter argument", errno_ptr);
-				ctrtool_exit(1);
-				break;
-			default:
-				ctrtool_cheap_perror("nsenter failed", errno_ptr);
-				ctrtool_exit(1);
-				break;
-		}
 	}
 	/* TODO: clone3, int $0x80 on x86 */
 	long clone_result = ctrtool_clone_onearg(clone_flags|SIGCHLD);
