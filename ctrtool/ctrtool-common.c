@@ -258,6 +258,11 @@ int ctrtool_parse_int_array(const char *input_str, struct iovec *result, unsigne
 	char *saveptr = NULL;
 	for (char *s = strtok_r(i_str_dup, ",", &saveptr); s; s = strtok_r(NULL, ",", &saveptr)) {
 		errno = 0;
+		if (!isdigit(s[0])) {
+			free(list.start);
+			free(i_str_dup);
+			return -1;
+		}
 		unsigned long long result_n = strtoull(s, NULL, 0);
 		if (errno) {
 			free(list.start);
@@ -299,6 +304,10 @@ static int ctrtool_parse_rlimit_string(const char *value, size_t limit, rlim_t *
 	if (strcasecmp(s_d, "unlimited") == 0) {
 		*result = RLIM_INFINITY;
 		return 0;
+	}
+	if (!isdigit(s_d[0])) {
+		errno = EINVAL;
+		return -1;
 	}
 	errno = 0;
 	unsigned long long limit_val = strtoull(s_d, NULL, 0);
