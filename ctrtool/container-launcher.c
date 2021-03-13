@@ -20,6 +20,7 @@
 #include <string.h>
 #include <sys/prctl.h>
 #include <sched.h>
+#include <linux/sched.h>
 #include <errno.h>
 #include <getopt.h>
 #include <syscall.h>
@@ -350,7 +351,9 @@ int ctr_scripts_container_launcher_main(int argc, char **argv) {
 	int errno_ptr = 0;
 	size_t current_nsenter_point = 0;
 	size_t current_nsenter_post_point = 0;
-	/* TODO: long options */
+	struct iovec clone3_set_tid = {0};
+	struct ctrtool_arraylist rlimit_list = {0};
+	rlimit_list.elem_size = sizeof(struct ctrtool_rlimit);
 	static struct option long_options[] = {
 		{"ambient-caps", required_argument, NULL, 'a'},
 		{"bounding-caps", required_argument, NULL, 'b'},
@@ -388,12 +391,14 @@ int ctr_scripts_container_launcher_main(int argc, char **argv) {
 		{"pidfd", no_argument, NULL, 70007},
 		{"pivot-root", required_argument, NULL, 'r'},
 		{"propagation", required_argument, NULL, 'R'},
+		{"rlimit", required_argument, NULL, 70015},
 		{"script", required_argument, NULL, 'x'},
 		{"script-interpreter", required_argument, NULL, 'e'},
 		{"script-is-shell", no_argument, NULL, 'd'},
 		{"script-no-fork", no_argument, NULL, 'F'},
 		{"securebits", required_argument, NULL, 'B'},
 		{"setsid", no_argument, NULL, 's'},
+		{"set-tid", required_argument, NULL, 70014},
 		{"socketpair", required_argument, NULL, 'X'},
 		{"thp-disable", required_argument, NULL, 'v'},
 		{"timerslack", required_argument, NULL, 'Q'},
@@ -687,6 +692,25 @@ invalid_propagation:
 					}
 				}
 				break;
+			case 70014:
+				free(clone3_set_tid.iov_base);
+				if (ctrtool_parse_int_array(optarg, &clone3_set_tid, sizeof(pid_t))) {
+					perror("--set-tid ctrtool_parse_int_array");
+					return 1;
+				}
+				break;
+			case 70015:
+				;
+				struct ctrtool_rlimit m_limit = {0};
+				if (ctrtool_parse_rlimit(optarg, &m_limit)) {
+					perror("ctrtool_parse_rlimit");
+					return 1;
+				}
+				if (ctrtool_arraylist_expand(&rlimit_list, &m_limit, 10)) {
+					perror("ctrtool_arraylist_expand");
+					return 1;
+				}
+				break;
 			default:
 				fprintf(stderr, "Usage: %s [-flags] [program] [arguments]\n"
 						"-C     new cgroup namespace\n"
@@ -941,13 +965,31 @@ invalid_propagation:
 		}
 		if (socketpair(AF_UNIX, the_type, 0, socketpair_to_child)) return 1;
 	}
-	/* TODO: clone3, int $0x80 on x86 */
-	long clone_result = ctrtool_clone_onearg(clone_flags|SIGCHLD);
+	long clone_result;
+	if (clone3_set_tid.iov_len) {
+#ifdef CTRTOOL_CLONE3_HACK
+		__aligned_u64 clone_args0[10] = {0};
+		clone_args0[0] = clone_flags;
+		clone_args0[4] = SIGCHLD;
+		clone_args0[8] = (uint64_t) clone3_set_tid.iov_base;
+		clone_args0[9] = clone3_set_tid.iov_len;
+#else
+		struct clone_args clone_args0 = {0};
+		clone_args0.flags = clone_flags;
+		clone_args0.exit_signal = SIGCHLD;
+		clone_args0.set_tid = (uint64_t) clone3_set_tid.iov_base;
+		clone_args0.set_tid_size = clone3_set_tid.iov_len;
+#endif
+		clone_result = ctrtool_raw_syscall(SYS_clone3, &clone_args0, sizeof(clone_args0), 0, 0, 0, 0);
+	} else {
+		clone_result = ctrtool_clone_onearg(clone_flags|SIGCHLD);
+	}
 	if (clone_result < 0) {
 		errno = -clone_result;
 		perror("clone()");
 		return 1;
 	}
+	free(clone3_set_tid.iov_base);
 	if (clone_result == 0) {
 		if (hostname) {
 			if (sethostname(hostname, strlen(hostname))) {
@@ -959,6 +1001,7 @@ invalid_propagation:
 		close(pipe_from_child[0]);
 		close(socketpair_to_child[0]);
 		close(lockfile_fd);
+		free(rlimit_list.start);
 		data_to_process.mount_propagation = mount_propagation;
 		data_to_process.socketpair_fd = socketpair_to_child[1];
 		data_to_process.notify_parent_fd = pipe_from_child[1];
@@ -1062,6 +1105,26 @@ invalid_propagation:
 		close(emptyfile_fd);
 no_emptyfile:;
 	}
+	struct ctrtool_rlimit *rlimit_list_base = rlimit_list.start;
+	for (size_t i = 0; i < rlimit_list.nr; i++) {
+		struct ctrtool_rlimit *current = &rlimit_list_base[i];
+		struct rlimit current_limits = {0};
+		if (prlimit(clone_result, current->limit_name, NULL, &current_limits)) {
+			perror("prlimit");
+			return 1;
+		}
+		if (current->change_soft) {
+			current_limits.rlim_cur = current->limit_value.rlim_cur;
+		}
+		if (current->change_hard) {
+			current_limits.rlim_max = current->limit_value.rlim_max;
+		}
+		if (prlimit(clone_result, current->limit_name, &current_limits, NULL)) {
+			perror("prlimit");
+			return 1;
+		}
+	}
+	free(rlimit_list.start);
 	const char *pid_string = &c_buf1[6];
 	size_t pid_strlen = strlen(pid_string);
 	for (struct pid_file *in_pid = pidfile_list; in_pid;) {

@@ -210,6 +210,9 @@ long ctrtool_syscall_errno_i(long nr, int *errno_ptr, long a, long b, long c, lo
 	return return_value;
 }
 int ctrtool_arraylist_expand(struct ctrtool_arraylist *list, const void *new_element, size_t step) {
+	if (list->elem_size == 0) {
+		return -1;
+	}
 	if (step <= 0) {
 		return -1;
 	}
@@ -240,6 +243,171 @@ int ctrtool_load_permitted_caps(void) {
 	if (sys_retval) {
 		errno = -sys_retval;
 		return -1;
+	}
+	return 0;
+}
+int ctrtool_parse_int_array(const char *input_str, struct iovec *result, unsigned int i_size) {
+	if (i_size > sizeof(unsigned long long)) {
+		errno = EINVAL;
+		return -1;
+	}
+	char *i_str_dup = strdup(input_str);
+	if (i_str_dup == NULL) return -1;
+	struct ctrtool_arraylist list = {0};
+	list.elem_size = i_size;
+	char *saveptr = NULL;
+	for (char *s = strtok_r(i_str_dup, ",", &saveptr); s; s = strtok_r(NULL, ",", &saveptr)) {
+		errno = 0;
+		unsigned long long result_n = strtoull(s, NULL, 0);
+		if (errno) {
+			free(list.start);
+			free(i_str_dup);
+			return -1;
+		}
+		if (i_size < sizeof(unsigned long long)) {
+			if (result_n >= (1ULL << (CHAR_BIT * i_size))) {
+				free(list.start);
+				free(i_str_dup);
+				errno = ERANGE;
+				return -1;
+			}
+		}
+		char *_result = (char *) &result_n;
+#if __BYTE_ORDER == __BIG_ENDIAN
+		_result += sizeof(unsigned long long) - i_size;
+#endif
+		if (ctrtool_arraylist_expand(&list, _result, 10)) {
+			free(list.start);
+			free(i_str_dup);
+			return -1;
+		}
+	}
+	free(i_str_dup);
+	result->iov_base = list.start;
+	result->iov_len = list.nr;
+	return 0;
+}
+static int ctrtool_parse_rlimit_string(const char *value, size_t limit, rlim_t *result) {
+	if (limit > 40) {
+		errno = ERANGE;
+		return -1;
+	}
+	if ((limit == 0) || (value[0] == 0)) {
+		return 1;
+	}
+	char *s_d = strndupa(value, limit);
+	if (strcasecmp(s_d, "unlimited") == 0) {
+		*result = RLIM_INFINITY;
+		return 0;
+	}
+	errno = 0;
+	unsigned long long limit_val = strtoull(s_d, NULL, 0);
+	if (errno) {
+		errno = ERANGE;
+		return -1;
+	}
+	if (sizeof(rlim_t) < sizeof(unsigned long long)) {
+		if (limit_val >= (1ULL << (sizeof(rlim_t) * CHAR_BIT))) {
+			errno = ERANGE;
+			return -1;
+		}
+	}
+	*result = limit_val;
+	return 0;
+}
+struct ctrtool_rlimit_spec {
+	const char *name;
+	int value;
+};
+static const struct ctrtool_rlimit_spec rlimits[] = {
+	{"as", RLIMIT_AS},
+	{"c", RLIMIT_CORE},
+	{"core", RLIMIT_CORE},
+	{"cpu", RLIMIT_CPU},
+	{"d", RLIMIT_DATA},
+	{"data", RLIMIT_DATA},
+	{"e", RLIMIT_NICE},
+	{"f", RLIMIT_FSIZE},
+	{"fsize", RLIMIT_FSIZE},
+	{"i", RLIMIT_SIGPENDING},
+	{"l", RLIMIT_MEMLOCK},
+	{"locks", RLIMIT_LOCKS},
+	{"m", RLIMIT_RSS},
+	{"memlock", RLIMIT_MEMLOCK},
+	{"msgqueue", RLIMIT_MSGQUEUE},
+	{"n", RLIMIT_NOFILE},
+	{"nice", RLIMIT_NICE},
+	{"nofile", RLIMIT_NOFILE},
+	{"nproc", RLIMIT_NPROC},
+	{"q", RLIMIT_MSGQUEUE},
+	{"r", RLIMIT_RTPRIO},
+	{"rss", RLIMIT_RSS},
+	{"rtprio", RLIMIT_RTPRIO},
+	{"rttime", RLIMIT_RTTIME},
+	{"s", RLIMIT_STACK},
+	{"sigpending", RLIMIT_SIGPENDING},
+	{"stack", RLIMIT_STACK},
+	{"t", RLIMIT_CPU},
+	{"u", RLIMIT_NPROC},
+	{"v", RLIMIT_AS},
+	{"x", RLIMIT_LOCKS},
+	{"y", RLIMIT_RTTIME}
+};
+static int compare_rlimits(const void *a_p, const void *b_p) {
+	const struct ctrtool_rlimit_spec *a = a_p;
+	const struct ctrtool_rlimit_spec *b = b_p;
+	return strcasecmp(a->name, b->name);
+}
+int ctrtool_parse_rlimit(const char *spec, struct ctrtool_rlimit *result) {
+	char *equal_brk = strchr(spec, '=');
+	if (!equal_brk) {
+		errno = EINVAL;
+		return -1;
+	}
+	size_t s_limit = equal_brk - spec;
+	if (s_limit > 20) s_limit = 20;
+	char *spec_s = strndupa(spec, s_limit);
+	struct ctrtool_rlimit_spec m_spec = {spec_s, 0};
+	struct ctrtool_rlimit_spec *rlimit_result = bsearch(&m_spec, rlimits, sizeof(rlimits)/sizeof(rlimits[0]), sizeof(rlimits[0]), compare_rlimits);
+	if (!rlimit_result) {
+		errno = ENOENT;
+		return -1;
+	}
+	equal_brk += 1;
+	char *colon_brk = strchr(equal_brk, ':');
+	if (!colon_brk) {
+		rlim_t f_result = -1;
+		if (ctrtool_parse_rlimit_string(equal_brk, 40, &f_result)) {
+			errno = EINVAL;
+			return -1;
+		}
+		result->change_hard = 1;
+		result->change_soft = 1;
+		result->limit_name = rlimit_result->value;
+		result->limit_value.rlim_cur = f_result;
+		result->limit_value.rlim_max = f_result;
+	} else {
+		rlim_t f_result_soft = -1;
+		rlim_t f_result_hard = -1;
+		int r_1 = ctrtool_parse_rlimit_string(equal_brk, colon_brk - equal_brk, &f_result_soft);
+		if (r_1 < 0) {
+			errno = EINVAL;
+			return -1;
+		}
+		int r_2 = ctrtool_parse_rlimit_string(&colon_brk[1], 40, &f_result_hard);
+		if (r_2 < 0) {
+			errno = EINVAL;
+			return -1;
+		}
+		if (r_1 == 0) {
+			result->change_soft = 1;
+			result->limit_value.rlim_cur = f_result_soft;
+		}
+		if (r_2 == 0) {
+			result->change_hard = 1;
+			result->limit_value.rlim_max = f_result_hard;
+		}
+		result->limit_name = rlimit_result->value;
 	}
 	return 0;
 }
