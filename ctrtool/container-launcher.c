@@ -890,6 +890,12 @@ invalid_propagation:
 		}
 	}
 	free(logfile); logfile = NULL;
+	
+	int pipe_to_child[2] = {-1, -1};
+	int pipe_from_child[2] = {-1, -1};
+	if (pipe2(pipe_to_child, O_CLOEXEC)) return 1;
+	if (pipe2(pipe_from_child, O_CLOEXEC)) return 1;
+	
 	uid_t current_uids[3] = {0, 0, 0};
 	if (owner_uid != -1) {
 		if (getresuid(&current_uids[0], &current_uids[1], &current_uids[2])) return 1;
@@ -919,11 +925,7 @@ invalid_propagation:
 				break;
 		}
 	}
-	int pipe_to_child[2] = {-1, -1};
-	int pipe_from_child[2] = {-1, -1};
 	int socketpair_to_child[2] = {-1, -1};
-	if (pipe2(pipe_to_child, O_CLOEXEC)) return 1;
-	if (pipe2(pipe_from_child, O_CLOEXEC)) return 1;
 	if (unix_socket_mode) {
 		int the_type = SOCK_STREAM;
 		switch(unix_socket_mode) {
