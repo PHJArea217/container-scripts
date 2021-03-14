@@ -2,7 +2,7 @@
 #include "ctrtool-common.h"
 #include <linux/filter.h>
 #include <linux/seccomp.h>
-#include <sys/capability.h>
+#include <linux/capability.h>
 #include <stdint.h>
 #include <string.h>
 #include <stdio.h>
