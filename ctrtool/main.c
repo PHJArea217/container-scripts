@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/eventfd.h>
+#include "ctrtool-common.h"
 int ctr_scripts_container_launcher_main(int argc, char **argv);
 int ctr_scripts_container_rootfs_mount_main(int argc, char **argv);
 int ctr_scripts_mini_init_main(int argc, char **argv);
@@ -17,10 +18,24 @@ struct command_def {
 	const char *name;
 	int (*main_function)(int, char **);
 };
+static int search_command(const char *base_command, int argc, char **argv, int from_escape);
+static int ctr_scripts_escape_main(int argc, char **argv) {
+	if (argc < 2) {
+		fputs("ctrtool_escape: Command required\n", stderr);
+		return 255;
+	}
+	if (ctrtool_escape()) {
+		perror("ctrtool_escape");
+		return 255;
+	}
+	return search_command(argv[1], argc - 1, &argv[1], 1);
+}
 static struct command_def command_list[] = {
+	{"_ctrtool_escaped", ctr_scripts_escape_main},
 	{"container-launcher", ctr_scripts_container_launcher_main},
 	{"container-rootfs-mount", ctr_scripts_container_rootfs_mount_main},
 	{"debug_shell", ctr_scripts_debug_shell_main},
+	{"escape", ctr_scripts_escape_main},
 	{"init", ctr_scripts_mini_init_main},
 	{"init2", ctr_scripts_mini_init2_main},
 	{"launcher", ctr_scripts_container_launcher_main},
@@ -36,7 +51,7 @@ static struct command_def command_list[] = {
 static int compare_command_def(const void *a, const void *b) {
 	return strcmp(((struct command_def *) a)->name, ((struct command_def *) b)->name);
 }
-static int search_command(const char *base_command, int argc, char **argv) {
+static int search_command(const char *base_command, int argc, char **argv, int from_escape) {
 	const char *base_command_c = base_command;
 	char *f = strrchr(base_command_c, '/');
 	if (f) {
@@ -49,7 +64,12 @@ static int search_command(const char *base_command, int argc, char **argv) {
 			fprintf(stderr, "BUG: argv[0] was NULL!\n");
 			return 255;
 		}
-		return result->main_function(argc, argv);
+		if (from_escape && (result->main_function == ctr_scripts_escape_main)) {
+			fprintf(stderr, "Multiple use of escape command not allowed\n");
+			return 255;
+		}
+		exit(result->main_function(argc, argv));
+		abort();
 	}
 	fprintf(stderr, "ctrtool: %s not found, if executing using different name, set $CTRTOOL_OVERRIDE_ARGV0_LOOKUP to 1\n", base_command);
 	return 255;
@@ -58,11 +78,15 @@ int main(int argc, char **argv) {
 	while (1) {
 //		int dummy_socket = socket(AF_UNIX, SOCK_STREAM|SOCK_CLOEXEC, 0);
 		int dummy_socket = eventfd(0, EFD_NONBLOCK);
-		if (dummy_socket == -1) return 1;
+		if (dummy_socket < 0) return 1;
 		if (dummy_socket >= 3) {
 			close(dummy_socket);
 			break;
 		}
+	}
+	if (ctrtool_save_argv(argc, argv)) {
+		perror("ctrtool_save_argv");
+		return -1;
 	}
 	char *override_lookup = getenv("CTRTOOL_OVERRIDE_ARGV0_LOOKUP");
 	if (override_lookup && (strtoul(override_lookup, NULL, 0) > 0)) {
@@ -76,12 +100,14 @@ int main(int argc, char **argv) {
 	if ((strlen(base_command_c) >= 7) && (memcmp(base_command_c, "ctrtool", 7) == 0)) {
 		goto default_lookup;
 	}
-	return search_command(argv[0], argc, argv);
+	return search_command(argv[0], argc, argv, 0);
 default_lookup:
 	if (argc < 2) {
-		fprintf(stderr, "Usage: %s [ debug_shell | init | launcher | mount_seq\n"
-				"\t| renameat2 | reset_cgroup | rootfs-mount | set_fds ] [ARGUMENTS]\n", argv[0]);
+		fprintf(stderr, "Usage: %s [ escape ] [ debug_shell | init | launcher | mount_seq\n"
+				"\t| renameat2 | reset_cgroup | rootfs-mount | set_fds ] [ARGUMENTS]\n"
+				"\nThis version of ctrtool has the /proc/self/exe mitigation.\n"
+				"To activate it, prefix the command with 'escape'.\n\n", argv[0]);
 		return 255;
 	}
-	return search_command(argv[1], argc-1, &argv[1]);
+	return search_command(argv[1], argc-1, &argv[1], 0);
 }

@@ -29,3 +29,5 @@ int ctrtool_arraylist_expand(struct ctrtool_arraylist *list, const void *new_ele
 int ctrtool_load_permitted_caps(void);
 int ctrtool_parse_int_array(const char *input_str, struct iovec *result, unsigned int i_size);
 int ctrtool_parse_rlimit(const char *spec, struct ctrtool_rlimit *result);
+int ctrtool_escape(void);
+int ctrtool_save_argv(int argc, char **argv);

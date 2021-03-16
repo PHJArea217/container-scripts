@@ -354,6 +354,8 @@ int ctr_scripts_container_launcher_main(int argc, char **argv) {
 	struct iovec clone3_set_tid = {0};
 	struct ctrtool_arraylist rlimit_list = {0};
 	rlimit_list.elem_size = sizeof(struct ctrtool_rlimit);
+	int has_escaped = 0;
+	int unsafe_no_escape = 0;
 	static struct option long_options[] = {
 		{"ambient-caps", required_argument, NULL, 'a'},
 		{"bounding-caps", required_argument, NULL, 'b'},
@@ -367,6 +369,7 @@ int ctr_scripts_container_launcher_main(int argc, char **argv) {
 		{"exec-file", required_argument, NULL, 70001},
 		{"exec-file-host", required_argument, NULL, 70002},
 		{"exec-no-cloexec", no_argument, NULL, 70003},
+		{"escape", no_argument, NULL, 70016},
 		{"fork", no_argument, NULL, 70011},
 		{"fork-daemon", no_argument, NULL, 70012},
 		{"gid", required_argument, NULL, 'G'},
@@ -405,6 +408,7 @@ int ctr_scripts_container_launcher_main(int argc, char **argv) {
 		{"uid", required_argument, NULL, 'S'},
 		{"uid-map", required_argument, NULL, 70004},
 		{"unsafe", no_argument, NULL, 'E'},
+		{"unsafe-no-escape", no_argument, NULL, 70017},
 		{"user", no_argument, NULL, 'U'},
 		{"userns-fd", required_argument, NULL, 'f'},
 		{"uts", no_argument, NULL, 'u'},
@@ -711,6 +715,18 @@ invalid_propagation:
 					return 1;
 				}
 				break;
+			case 70016:
+				if (!has_escaped) {
+					if (ctrtool_escape()) {
+						perror("ctrtool_escape");
+						return 1;
+					}
+				}
+				has_escaped = 1;
+				break;
+			case 70017:
+				unsafe_no_escape = 1;
+				break;
 			default:
 				fprintf(stderr, "Usage: %s [-flags] [program] [arguments]\n"
 						"-C     new cgroup namespace\n"
@@ -794,6 +810,18 @@ invalid_propagation:
 		if (!!(data_to_process.mount_proc & 1) && (!(clone_flags & CLONE_NEWNS) || !((mount_propagation == MS_PRIVATE) || (mount_propagation == MS_SLAVE)))) {
 			fputs("attempting to mount /proc with unsafe propagation or without CLONE_NEWNS, use -E to override\n", stderr);
 			return 1;
+		}
+	}
+	if (!unsafe_no_escape) {
+		if (!has_escaped) {
+			if (current_nsenter_point || current_nsenter_post_point) {
+				fputs("attempting to use --nsenter or --nsenter-post without --escape\n", stderr);
+				return 1;
+			}
+			if ((userns_fd >= 0) || (clone_flags & CLONE_NEWUSER)) {
+				fputs("attempting to use --user or --userns-fd without --escape\n", stderr);
+				return 1;
+			}
 		}
 	}
 	if (exec_file) {

@@ -15,6 +15,9 @@
 #include <dirent.h>
 #include <ctype.h>
 #include <fcntl.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <sys/sendfile.h>
 static int int32_to_num(uint32_t num, char *result) {
 	static char digits[] = "0123456789";
 	result[9] = digits[num % 10];
@@ -419,4 +422,81 @@ int ctrtool_parse_rlimit(const char *spec, struct ctrtool_rlimit *result) {
 		result->limit_name = rlimit_result->value;
 	}
 	return 0;
+}
+char **ctrtool_saved_argv = NULL;
+static int ctrtool_already_escaped = 0;
+int ctrtool_save_argv(int argc, char **argv) {
+	char **new_argv = calloc(sizeof(char *), argc+1);
+	if (new_argv == NULL) return -1;
+	for (int i = 0; i < argc; i++) {
+		const char *old_p = argv[i];
+		if (!old_p) {
+			free(new_argv);
+			return -1;
+		}
+		char *new_p = strdup(old_p);
+		if (!new_p) {
+			free(new_argv);
+			return -1;
+		}
+		new_argv[i] = new_p;
+	}
+	ctrtool_saved_argv = new_argv;
+	return 0;
+}
+int ctrtool_escape(void) {
+	if (ctrtool_already_escaped) return 0;
+	if (!ctrtool_saved_argv) {
+		return -1;
+	}
+	int exe_fd = open("/proc/self/exe", O_RDONLY|O_NOCTTY|O_CLOEXEC);
+	if (exe_fd < 0) {
+		return -1;
+	}
+	int memfd_fd = memfd_create("ctrtool", MFD_CLOEXEC|MFD_ALLOW_SEALING);
+	if (memfd_fd < 0) {
+		close(exe_fd);
+		return -1;
+	}
+	if (fchmod(memfd_fd, 0555)) {
+		goto close_fail;
+	}
+	struct stat st_exe = {0};
+	struct stat st_memfd = {0};
+	if (fstat(exe_fd, &st_exe)) goto close_fail;
+	if (fstat(memfd_fd, &st_memfd)) goto close_fail;
+	if (st_exe.st_dev == st_memfd.st_dev) {
+		int f_seals = fcntl(exe_fd, F_GET_SEALS, 0);
+		if (f_seals < 0) goto close_fail;
+		if ((f_seals & (F_SEAL_SEAL|F_SEAL_WRITE|F_SEAL_GROW|F_SEAL_SHRINK)) == (F_SEAL_SEAL|F_SEAL_WRITE|F_SEAL_GROW|F_SEAL_SHRINK)) {
+			close(memfd_fd);
+			close(exe_fd);
+			char **c_ptr = ctrtool_saved_argv;
+			while (*c_ptr) {
+				free(*c_ptr);
+				c_ptr++;
+			}
+			free(ctrtool_saved_argv);
+			ctrtool_saved_argv = NULL;
+			ctrtool_already_escaped = 1;
+			return 0;
+		}
+	}
+	while (1) {
+		ssize_t sf_result = sendfile(memfd_fd, exe_fd, NULL, 1048576);
+		if (sf_result < 0) {
+			goto close_fail;
+		}
+		if (sf_result == 0) {
+			break;
+		}
+	}
+	if (fcntl(memfd_fd, F_ADD_SEALS, F_SEAL_SEAL|F_SEAL_WRITE|F_SEAL_GROW|F_SEAL_SHRINK)) {
+		goto close_fail;
+	}
+	ctrtool_syscall(SYS_execveat, memfd_fd, "", ctrtool_saved_argv, environ, AT_EMPTY_PATH, 0);
+close_fail:
+	close(exe_fd);
+	close(memfd_fd);
+	return -1;
 }
