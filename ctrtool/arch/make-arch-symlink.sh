@@ -11,8 +11,11 @@ case "$ARCH" in
 	x86_64)
 		ln -sf x86-64 current
 		;;
+	aarch64)
+		ln -sf aarch64 current
+		;;
 	*)
-		printf 'Unknown architecture %s\n'
+		printf 'Unknown architecture %s\n' "$ARCH"
 		exit 1
 		;;
 esac
