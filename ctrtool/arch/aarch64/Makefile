@@ -4,7 +4,7 @@ arch.a: syscall.o
 	ar r $@ $<
 
 syscall.o: syscall.S
-	as --64 -o $@ $<
+	as -o $@ $<
 
 clean:
 	rm -f syscall.o arch.a

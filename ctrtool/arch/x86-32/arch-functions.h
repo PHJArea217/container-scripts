@@ -10,4 +10,5 @@ __attribute__((noreturn)) void ctrtool_arch_x86_32_exit(int status);
 #define ctrtool_exit(s) ctrtool_arch_x86_32_exit(s)
 
 #define CTRTOOL_SYS_pidfd_open 434
+#define CTRTOOL_SYS_close_range 436
 #define CTRTOOL_SYS_pidfd_getfd 438

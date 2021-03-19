@@ -4,7 +4,7 @@ ctrtool_arch_aarch64_syscall_r:
 	svc #0
 	ret
 ctrtool_arch_aarch64_exit:
-	mov x8, #1
+	mov x8, #93
 	svc #0
 x:	wfi
 	b x

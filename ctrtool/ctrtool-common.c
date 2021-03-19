@@ -146,10 +146,8 @@ int ctrtool_close_range(int min_fd, int max_fd, unsigned int flags) {
 	}
 	int rv = -1;
 	errno = ENOSYS;
-#ifdef SYS_close_range
-	rv = syscall(SYS_close_range, min_fd, max_fd, flags, 0, 0, 0);
-#elif defined(__x86_64__) || defined(__i386__)
-	rv = syscall(436, min_fd, max_fd, flags, 0, 0, 0);
+#ifdef CTRTOOL_SYS_close_range
+	rv = syscall(CTRTOOL_SYS_close_range, min_fd, max_fd, flags, 0, 0, 0);
 #endif
 	if ((rv < 0) && (errno == ENOSYS)) {
 		return ctrtool_close_range_compat(min_fd, max_fd, flags);
