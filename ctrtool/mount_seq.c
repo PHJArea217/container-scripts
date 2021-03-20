@@ -25,6 +25,7 @@ struct mount_seq {
 			unsigned int flags;
 			unsigned skip_source_symlink_check:1;
 			unsigned mkdir_if_not_exist:1;
+			unsigned make_file_if_not_exist:1;
 			char *source;
 			char *fstype;
 			char *data;
@@ -230,7 +231,7 @@ static int process_cmd(struct mount_seq *s) {
 				mnt_source = "/dev/null";
 			}
 			if (!s->skip_target_symlink_check) {
-				if (check_path_for_symlinks(s->target, s->opts.mount_opts.mkdir_if_not_exist)) {
+				if (check_path_for_symlinks(s->target, s->opts.mount_opts.mkdir_if_not_exist || s->opts.mount_opts.make_file_if_not_exist)) {
 					fprintf(stderr, "Checking %s for symlinks: %s\n", s->target, strerror(errno));
 					return 2;
 				}
@@ -239,6 +240,13 @@ static int process_cmd(struct mount_seq *s) {
 				if (mkdir(s->target, 0700)) {
 					if (errno != EEXIST) {
 						fprintf(stderr, "mkdir %s: %s\n", s->target, strerror(errno));
+						return 1;
+					}
+				}
+			} else if (s->opts.mount_opts.make_file_if_not_exist) {
+				if (mknod(s->target, S_IFSOCK|0600, 0)) {
+					if (errno != EEXIST) {
+						fprintf(stderr, "mknod %s: %s\n", s->target, strerror(errno));
 						return 1;
 					}
 				}
@@ -307,7 +315,7 @@ int ctr_scripts_mount_seq_main(int argc, char **argv) {
 	int opt = 0;
 	const char *error_str = NULL;
 	char i_opt = 0;
-	while ((opt = getopt(argc, argv, "m:D:u:S:c:kKeyEM:s:t:O:F:o:")) > 0) {
+	while ((opt = getopt(argc, argv, "m:D:u:S:c:kKeyEM:s:t:O:F:o:f")) > 0) {
 		switch(opt) {
 			case 'm':
 			case 'D':
@@ -400,15 +408,20 @@ int ctr_scripts_mount_seq_main(int argc, char **argv) {
 				}
 				break;
 			case 'E':
+			case 'f':
 				if (!current) {
 					goto fail_no_global;
 				}
 				switch (current->cmd) {
 					case 'm':
-						current->opts.mount_opts.mkdir_if_not_exist = 1;
+						if (opt == 'E') {
+							current->opts.mount_opts.mkdir_if_not_exist = 1;
+						} else {
+							current->opts.mount_opts.make_file_if_not_exist = 1;
+						}
 						break;
 					default:
-						error_str = "-E may only be used with -m";
+						error_str = "-E and -f may only be used with -m";
 						goto fail_all;
 				}
 				break;

@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #include "ctrtool-common.h"
 #include <ctype.h>
 #include <errno.h>
@@ -9,6 +10,10 @@
 #include <sys/mount.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <syscall.h>
+#include <signal.h>
+#include <sched.h>
+#include <fcntl.h>
 struct opt_element {
 	const char *name;
 	union {
@@ -136,9 +141,75 @@ static int check_syscall(int result, const char *error_msg) {
 	}
 	return result;
 }
+static int mount_proc(int pid_ns, const char *target) {
+	if (signal(SIGCHLD, SIG_DFL) == SIG_ERR) {
+		return -1;
+	}
+	long child_pid1 = ctrtool_clone_onearg(SIGCHLD);
+	if (child_pid1 < 0) {
+		errno = -child_pid1;
+		return -1;
+	}
+	if (child_pid1 == 0) {
+		long syscall_result = ctrtool_syscall(SYS_setns, pid_ns, CLONE_NEWPID, 0, 0, 0, 0);
+		if (syscall_result < 0) {
+			ctrtool_cheap_perror("setns failed", -syscall_result);
+			ctrtool_exit(1);
+			while (1) ;
+		}
+		ctrtool_syscall(SYS_close, pid_ns, 0, 0, 0, 0, 0);
+		syscall_result = ctrtool_clone_onearg(SIGCHLD);
+		if (syscall_result < 0) {
+			ctrtool_exit(2);
+			while (1) ;
+		}
+		if (syscall_result == 0) {
+			syscall_result = ctrtool_syscall(SYS_mount, "none", target, "proc", MS_NOSUID|MS_NODEV|MS_NOEXEC, NULL, 0);
+			if (syscall_result < 0) {
+				ctrtool_cheap_perror("mount /proc", -syscall_result);
+				ctrtool_exit(3);
+				while (1) ;
+			}
+			ctrtool_exit(0);
+			while (1) ;
+		}
+x_wait1:
+		;int wait_status = 0x100;
+		long wait_result = ctrtool_syscall(SYS_wait4, syscall_result, &wait_status, 0, 0, 0, 0);
+		if (wait_result == -EINTR) goto x_wait1;
+		if (wait_result > 0) {
+			if (WIFEXITED(wait_status) && (WEXITSTATUS(wait_status) == 0)) {
+				ctrtool_exit(0);
+			} else {
+				ctrtool_exit(4);
+			}
+		} else {
+			ctrtool_exit(3);
+		}
+		while (1) ;
+	} else {
+x_wait2:
+		;int wait_status = 0x100;
+		long wait_result = ctrtool_syscall(SYS_wait4, child_pid1, &wait_status, 0, 0, 0, 0);
+		if (wait_result == -EINTR) goto x_wait2;
+		if (wait_result > 0) {
+			if (WIFEXITED(wait_status) && (WEXITSTATUS(wait_status) == 0)) {
+				return 0;
+			} else {
+				errno = EPERM;
+				return -1;
+			}
+		} else {
+			errno = EAGAIN;
+			return -1;
+		}
+	}
+	return -1;
+}
 int ctr_scripts_container_rootfs_mount_main(int argc, char **argv) {
 	int opt = 0;
-	while ((opt = getopt(argc, argv, "o:")) > 0) {
+	char *mount_proc_only = NULL;
+	while ((opt = getopt(argc, argv, "o:p:t")) > 0) {
 		switch(opt) {
 			case 'o':
 				if (my_args_size >= 256) {
@@ -157,6 +228,10 @@ int ctr_scripts_container_rootfs_mount_main(int argc, char **argv) {
 				current_arg->name = strdup_optarg;
 				current_arg->value = b;
 				break;
+			case 'p':
+				mount_proc_only = ctrtool_strdup(optarg);
+			case 't':
+				break;
 			default:
 				return 1;
 				break;
@@ -168,6 +243,13 @@ int ctr_scripts_container_rootfs_mount_main(int argc, char **argv) {
 		return 1;
 	}
 	char *mount_directory = ctrtool_strdup(argv[optind]);
+	if (mount_proc_only) {
+		int proc_fd = check_syscall(open(mount_proc_only, O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_NOCTTY), "PID namespace");
+		free(mount_proc_only);
+		check_syscall(mount_proc(proc_fd, mount_directory), "mount /proc");
+		free(mount_directory);
+		return 0;
+	}
 #define BOOL_FALSE(name) parse_arg_bool(get_arg(name), NULL, 0)
 #define BOOL_TRUE(name) parse_arg_bool(get_arg(name), NULL, 1)
 	int do_run_dirs = BOOL_TRUE("run_dirs");
@@ -175,19 +257,43 @@ int ctr_scripts_container_rootfs_mount_main(int argc, char **argv) {
 	int do_mqueue = BOOL_TRUE("mount_mqueue");
 	int do_pts = BOOL_TRUE("mount_devpts");
 	int do_sys = BOOL_FALSE("mount_sysfs");
+	int do_mount_proc = BOOL_FALSE("mount_proc");
+	int do_systemd_hack = BOOL_FALSE("systemd");
 	int do_alt_root_symlinks = BOOL_FALSE("root_symlink_usr");
 	uint64_t rootfs_opts = parse_arg_int_with_preset(get_arg("root_link_opts"), root_link_opts, ARRAY_SIZE(root_link_opts), "Invalid root_link_opts", 0xaaaaaaaa);
 	uint64_t dev_opts = parse_arg_int_with_preset(get_arg("dev_opts"), devfs_opts, ARRAY_SIZE(devfs_opts), "Invalid dev_opts", 0xaaaaaaaa);
 	check_syscall(umask(parse_arg_int(get_arg("umask"), "Invalid umask", NULL, 022)), "umask");
+	
+	char *mount_proc_s = get_arg("pid_ns");
+	int proc_fd = -1;
+	if (mount_proc_s) {
+		proc_fd = check_syscall(open(mount_proc_s, O_RDONLY|O_NONBLOCK|O_NOCTTY|O_CLOEXEC), "PID namespace");
+	} else if (do_mount_proc) {
+		proc_fd = -2;
+	}
 	check_syscall(mount("none", mount_directory, "tmpfs", 0, get_arg_default(get_arg("tmpfs_mount_opts"), "mode=0755")), "mount tmpfs");
 	check_syscall(chdir(mount_directory), "cd mount directory");
+	free(mount_directory);
+	mount_directory = NULL;
 	check_syscall(mkdir("proc", 0700), "mkdir /proc");
+	if (proc_fd >= 0) {
+		check_syscall(mount_proc(proc_fd, "proc"), "mount /proc");
+		close(proc_fd);
+	} else if (proc_fd == -2) {
+		check_syscall(mount("none", "proc", "proc", MS_NOSUID|MS_NODEV|MS_NOEXEC, NULL), "mount /proc");
+	}
 	check_syscall(mkdir("sys", 0700), "mkdir /sys");
 	check_syscall(mkdir("dev", 0777), "mkdir /dev");
+	if (do_systemd_hack) {
+		check_syscall(mount("dev", "dev", NULL, MS_BIND, NULL), "mount /dev");
+	}
 	check_syscall(mkdir("dev/net", 0777), "mkdir /dev/net");
 	check_syscall(mkdir("dev/mqueue", 0700), "mkdir /dev/mqueue");
 	check_syscall(mkdir("dev/pts", 0700), "mkdir /dev/pts");
 	check_syscall(mkdir("run", 0777), "mkdir /run");
+	if (do_systemd_hack) {
+		check_syscall(mount("run", "run", NULL, MS_BIND, NULL), "mount /run");
+	}
 	if (do_run_dirs) {
 		check_syscall(mkdir("run/lock", 0777), "mkdir /run/lock");
 		check_syscall(mkdir("run/shm", 0777), "mkdir /run/shm");
@@ -247,7 +353,7 @@ int ctr_scripts_container_rootfs_mount_main(int argc, char **argv) {
 				check_syscall(symlink(dev_symlinks_c[i], &my_value[1]), "symlink");
 				break;
 			case 2:
-				check_syscall(mknod(&my_value[1], S_IFREG|0666, 0), "mknod");
+				check_syscall(mknod(&my_value[1], S_IFSOCK|0666, 0), "mknod");
 				check_syscall(mount(my_value, &my_value[1], NULL, MS_BIND|MS_REC, NULL), "mount");
 				break;
 			case 3:
