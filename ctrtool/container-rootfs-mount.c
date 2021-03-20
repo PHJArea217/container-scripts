@@ -230,6 +230,7 @@ int ctr_scripts_container_rootfs_mount_main(int argc, char **argv) {
 				break;
 			case 'p':
 				mount_proc_only = ctrtool_strdup(optarg);
+				break;
 			case 't':
 				break;
 			default:
@@ -237,11 +238,11 @@ int ctr_scripts_container_rootfs_mount_main(int argc, char **argv) {
 				break;
 		}
 	}
-	qsort(my_args, my_args_size, sizeof(struct cl_args), compare_args);
 	if (!argv[optind]) {
 		fprintf(stderr, "%s: Mountpoint not specified\n", argv[0]);
 		return 1;
 	}
+	qsort(my_args, my_args_size, sizeof(struct cl_args), compare_args);
 	char *mount_directory = ctrtool_strdup(argv[optind]);
 	if (mount_proc_only) {
 		int proc_fd = check_syscall(open(mount_proc_only, O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_NOCTTY), "PID namespace");
@@ -296,11 +297,20 @@ int ctr_scripts_container_rootfs_mount_main(int argc, char **argv) {
 	}
 	if (do_run_dirs) {
 		check_syscall(mkdir("run/lock", 0777), "mkdir /run/lock");
-		check_syscall(mkdir("run/shm", 0777), "mkdir /run/shm");
-		check_syscall(symlink("/run/shm", "dev/shm"), "/dev/shm");
+		if (do_systemd_hack) {
+			check_syscall(mkdir("dev/shm", 0777), "mkdir /dev/shm");
+			check_syscall(symlink("/dev/shm", "run/shm"), "/run/shm");
+		} else {
+			check_syscall(mkdir("run/shm", 0777), "mkdir /run/shm");
+			check_syscall(symlink("/run/shm", "dev/shm"), "/dev/shm");
+		}
 		if (do_tmp_world) {
 			check_syscall(chmod("run/lock", 01777), "chmod /run/lock");
-			check_syscall(chmod("run/shm", 01777), "chmod /run/shm");
+			if (do_systemd_hack) {
+				check_syscall(chmod("dev/shm", 01777), "chmod /dev/shm");
+			} else {
+				check_syscall(chmod("run/shm", 01777), "chmod /run/shm");
+			}
 		}
 	}
 	check_syscall(mkdir("tmp", 0777), "mkdir /tmp");
