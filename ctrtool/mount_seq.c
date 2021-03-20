@@ -14,6 +14,7 @@
 #define MOUNT_SEQ_CMD_UMOUNT 'u'
 #define MOUNT_SEQ_CMD_SYSTEM 'S'
 #define MOUNT_SEQ_CMD_CHDIR 'c'
+#define MOUNT_SEQ_CMD_SYMLINK 'l'
 struct mount_seq {
 	char *target;
 	uint8_t cmd;
@@ -39,6 +40,11 @@ struct mount_seq {
 		struct {
 			unsigned int flags;
 		} umount_opts;
+		struct {
+			unsigned int flags;
+			unsigned int _padding;
+			char *link_name;
+		} symlink_opts;
 	} opts;
 };
 static unsigned int flags_bitmap_mount[] = {
@@ -304,6 +310,22 @@ static int process_cmd(struct mount_seq *s) {
 				return 1;
 			}
 			break;
+		case MOUNT_SEQ_CMD_SYMLINK:
+			if (!s->opts.symlink_opts.link_name) {
+				fprintf(stderr, "No link target specified for %s\n", s->target);
+				return 2;
+			}
+			if (!s->skip_target_symlink_check) {
+				if (check_path_for_symlinks(s->target, 1)) {
+					fprintf(stderr, "Checking %s for symlinks: %s\n", s->target, strerror(errno));
+					return 2;
+				}
+			}
+			if (symlink(s->opts.symlink_opts.link_name, s->target)) {
+				fprintf(stderr, "symlink %s to %s: %s\n", s->target, s->opts.symlink_opts.link_name, strerror(errno));
+				return 1;
+			}
+			break;
 	}
 	return 0;
 }
@@ -315,13 +337,14 @@ int ctr_scripts_mount_seq_main(int argc, char **argv) {
 	int opt = 0;
 	const char *error_str = NULL;
 	char i_opt = 0;
-	while ((opt = getopt(argc, argv, "m:D:u:S:c:kKeyEM:s:t:O:F:o:f")) > 0) {
+	while ((opt = getopt(argc, argv, "m:D:u:S:c:l:kKeyEM:s:t:O:F:o:f")) > 0) {
 		switch(opt) {
 			case 'm':
 			case 'D':
 			case 'u':
 			case 'S':
 			case 'c':
+			case 'l':
 				if (m_list_size >= m_list_max) {
 					m_list_max += 25;
 					m_list = reallocarray(m_list, m_list_max, sizeof(struct mount_seq));
@@ -375,8 +398,12 @@ int ctr_scripts_mount_seq_main(int argc, char **argv) {
 						free(current->opts.mount_opts.source);
 						current->opts.mount_opts.source = ctrtool_strdup(optarg);
 						break;
+					case 'l':
+						free(current->opts.symlink_opts.link_name);
+						current->opts.symlink_opts.link_name = ctrtool_strdup(optarg);
+						break;
 					default:
-						error_str = "-s may only be used with -m";
+						error_str = "-s may only be used with -m or -l";
 						goto fail_all;
 				}
 				break;
