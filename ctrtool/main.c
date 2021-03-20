@@ -97,7 +97,10 @@ int main(int argc, char **argv) {
 	if (f) {
 		base_command_c = &f[1];
 	}
-	if ((strlen(base_command_c) >= 7) && (memcmp(base_command_c, "ctrtool", 7) == 0)) {
+	size_t len_base_command_c = strnlen(base_command_c, 7);
+	if ((len_base_command_c >= 7) && (memcmp(base_command_c, "ctrtool", 7) == 0)) {
+		goto default_lookup;
+	} else if ((len_base_command_c == 3) && (memcmp(base_command_c, "exe", 3) == 0)) {
 		goto default_lookup;
 	}
 	return search_command(argv[0], argc, argv, 0);
