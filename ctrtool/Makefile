@@ -1,9 +1,9 @@
 CC ?= $(CROSS_COMPILE)gcc
 CCLD ?= $(CC)
 AR ?= $(CROSS_COMPILE)ar
-CFLAGS ?= -O3 -g -fstack-protector-strong -fstack-clash-protection -fcf-protection=full -D_FORTIFY_SOURCE=2 -fPIC -fPIE $(CFLAGS_EXTRA)
-CCLDFLAGS ?= -Wl,-z,relro -Wl,-z,now -pie
-CCLDFLAGS_S ?= -Wl,-z,relro -Wl,-z,now -static-pie
+CFLAGS ?= -O3 -g -Wall -fstack-protector-strong -fstack-clash-protection -fcf-protection=full -D_FORTIFY_SOURCE=2 -fPIC -fPIE $(CFLAGS_EXTRA)
+CCLDFLAGS ?= -Wl,-z,relro,-z,now -pie
+CCLDFLAGS_S ?= -Wl,-z,relro,-z,now -static-pie
 
 all: ctrtool ctrtool-static
 
@@ -20,7 +20,7 @@ arch/current/arch.a:
 	make -C arch all
 
 %.o: %.c ctrtool-common.h arch/current/arch.a
-	$(CC) $(CFLAGS) -c -o $@ $< -Wall
+	$(CC) $(CFLAGS) -c -o $@ $<
 
 clean:
 	rm -f *.o ctrtool ctrtool-static ctrtool.a
