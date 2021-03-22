@@ -1,10 +1,10 @@
 all: arch.a
 
 arch.a: syscall.o
-	ar r $@ $<
+	aarch64-linux-gnu-ar r $@ $<
 
 syscall.o: syscall.S
-	as -o $@ $<
+	aarch64-linux-gnu-as -o $@ $<
 
 clean:
 	rm -f syscall.o arch.a

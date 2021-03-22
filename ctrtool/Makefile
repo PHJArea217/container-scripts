@@ -1,6 +1,6 @@
-CC ?= gcc
+CC ?= $(CROSS_COMPILE)gcc
 CCLD ?= $(CC)
-AR ?= ar
+AR ?= $(CROSS_COMPILE)ar
 CFLAGS ?= -O3 -g -fstack-protector-strong -fstack-clash-protection -fcf-protection=full -D_FORTIFY_SOURCE=2 -fPIC -fPIE $(CFLAGS_EXTRA)
 CCLDFLAGS ?= -Wl,-z,relro -Wl,-z,now -pie
 CCLDFLAGS_S ?= -Wl,-z,relro -Wl,-z,now -static-pie
