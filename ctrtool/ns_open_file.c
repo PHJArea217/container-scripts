@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <signal.h>
+#include <sys/prctl.h>
 #include <wait.h>
 #include <sys/mman.h>
 #include <sched.h>
@@ -280,6 +281,10 @@ no_addr_part:
 			}
 			if (child_pid == 0) {
 				if (current->enter_userns) {
+					if (prctl(PR_SET_DUMPABLE, 0, 0, 0, 0)) {
+						perror("PR_SET_DUMPABLE");
+						ctrtool_exit(255);
+					}
 					int userns_fd = ioctl(ns_fd, NS_GET_USERNS, 0);
 					if (userns_fd < 0) {
 						shared_mem_region[0] = -1;

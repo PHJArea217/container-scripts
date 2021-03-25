@@ -259,6 +259,9 @@ static const char *child_func(struct child_data *data, int *errno_ptr) {
 	}
 	/* step 9: pivot_root */
 	if (data->pivot_root_dir) {
+		if (ctrtool_syscall_errno(SYS_prctl, errno_ptr, PR_SET_DUMPABLE, 0, 0, 0, 0, 0)) {
+			return "!PR_SET_DUMPABLE";
+		}
 		if (chdir(data->pivot_root_dir)) return "cd pivot_root_dir";
 		/* EVERYTHING BELOW HERE IS ASSUMED TO BE EXTREMELY DANGEROUS SINCE THE ROOT FS HAS CHANGED */
 		/* AND A MALICIOUS CONTAINER ROOTFS COULD ALLOW ACCESS TO THE HOST'S ROOT FS */
@@ -285,6 +288,9 @@ static const char *child_func(struct child_data *data, int *errno_ptr) {
 				return "!nsenter failed";
 				break;
 		}
+	}
+	if (ctrtool_syscall_errno(SYS_prctl, errno_ptr, PR_SET_DUMPABLE, 0, 0, 0, 0, 0)) {
+		return "!PR_SET_DUMPABLE";
 	}
 	/* step 12: redirect stderr/stdout */
 	if (data->log_fd != -1) {
