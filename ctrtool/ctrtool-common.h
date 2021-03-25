@@ -26,6 +26,7 @@ char *ctrtool_strdup(const char *str);
 long ctrtool_syscall_errno_i(long nr, int *errno_ptr, long a, long b, long c, long d, long e, long f);
 #define ctrtool_syscall_errno(nr, ptr, a, b, c, d, e, f) ctrtool_syscall_errno_i(nr, ptr, (long)(a), (long)(b), (long)(c), (long)(d), (long)(e), (long)(f))
 int ctrtool_arraylist_expand(struct ctrtool_arraylist *list, const void *new_element, size_t step);
+int ctrtool_arraylist_expand_s(struct ctrtool_arraylist *list, const void *new_element, size_t step, void **result);
 int ctrtool_load_permitted_caps(void);
 int ctrtool_parse_int_array(const char *input_str, struct iovec *result, unsigned int i_size);
 int ctrtool_parse_rlimit(const char *spec, struct ctrtool_rlimit *result);

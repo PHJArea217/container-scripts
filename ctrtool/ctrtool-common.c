@@ -210,7 +210,7 @@ long ctrtool_syscall_errno_i(long nr, int *errno_ptr, long a, long b, long c, lo
 	}
 	return return_value;
 }
-int ctrtool_arraylist_expand(struct ctrtool_arraylist *list, const void *new_element, size_t step) {
+int ctrtool_arraylist_expand_s(struct ctrtool_arraylist *list, const void *new_element, size_t step, void **result) {
 	if (list->elem_size == 0) {
 		return -1;
 	}
@@ -225,9 +225,20 @@ int ctrtool_arraylist_expand(struct ctrtool_arraylist *list, const void *new_ele
 		list->start = new_list_head;
 		list->max = new_list_max;
 	}
-	memcpy(&((char *) list->start)[list->nr * list->elem_size], new_element, list->elem_size);
+	void *new_location = &((char *) list->start)[list->nr * list->elem_size];
+	if (new_element) {
+		memcpy(new_location, new_element, list->elem_size);
+	} else {
+		memset(new_location, 0, list->elem_size);
+	}
+	if (result) {
+		*result = new_location;
+	}
 	list->nr = new_list_size;
 	return 0;
+}
+int ctrtool_arraylist_expand(struct ctrtool_arraylist *list, const void *new_element, size_t step) {
+	return ctrtool_arraylist_expand_s(list, new_element, step, NULL);
 }
 int ctrtool_load_permitted_caps(void) {
 	struct __user_cap_header_struct cap_h = {_LINUX_CAPABILITY_VERSION_3, 0};

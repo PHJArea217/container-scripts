@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #include <string.h>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -10,6 +11,7 @@ int ctr_scripts_container_rootfs_mount_main(int argc, char **argv);
 int ctr_scripts_mini_init_main(int argc, char **argv);
 int ctr_scripts_mini_init2_main(int argc, char **argv);
 int ctr_scripts_mount_seq_main(int argc, char **argv);
+int ctr_scripts_ns_open_file_main(int argc, char **argv);
 int ctr_scripts_reset_cgroup_main(int argc, char **argv);
 int ctr_scripts_simple_renameat2_main(int argc, char **argv);
 int ctr_scripts_debug_shell_main(int argc, char **argv);
@@ -42,6 +44,7 @@ static struct command_def command_list[] = {
 	{"mini-init", ctr_scripts_mini_init_main},
 	{"mini-init2", ctr_scripts_mini_init2_main},
 	{"mount_seq", ctr_scripts_mount_seq_main},
+	{"ns_open_file", ctr_scripts_ns_open_file_main},
 	{"renameat2", ctr_scripts_simple_renameat2_main},
 	{"reset_cgroup", ctr_scripts_reset_cgroup_main},
 	{"rootfs-mount", ctr_scripts_container_rootfs_mount_main},
