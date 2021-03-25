@@ -6,6 +6,7 @@
 #include <ctype.h>
 #include <stdlib.h>
 #include <syscall.h>
+#include <errno.h>
 static int cl_enter_proc(int proc_fd, const char *name, int nstype, int req_mask, int close_proc_fd, int *errno_ptr) {
 	if (!(req_mask & nstype)) {
 		if (close_proc_fd) {

@@ -50,6 +50,7 @@ struct child_data {
 	unsigned keepcaps:1;
 	unsigned no_cloexec_exec_fd:1;
 	unsigned exec_fd_is_memfd:1;
+	unsigned debug_dumpable:1;
 	unsigned fork_mode:2;
 
 	int notify_parent_fd;
@@ -259,8 +260,10 @@ static const char *child_func(struct child_data *data, int *errno_ptr) {
 	}
 	/* step 9: pivot_root */
 	if (data->pivot_root_dir) {
-		if (ctrtool_syscall_errno(SYS_prctl, errno_ptr, PR_SET_DUMPABLE, 0, 0, 0, 0, 0)) {
-			return "!PR_SET_DUMPABLE";
+		if (!data->debug_dumpable) {
+			if (ctrtool_syscall_errno(SYS_prctl, errno_ptr, PR_SET_DUMPABLE, 0, 0, 0, 0, 0)) {
+				return "!PR_SET_DUMPABLE";
+			}
 		}
 		if (chdir(data->pivot_root_dir)) return "cd pivot_root_dir";
 		/* EVERYTHING BELOW HERE IS ASSUMED TO BE EXTREMELY DANGEROUS SINCE THE ROOT FS HAS CHANGED */
@@ -289,8 +292,10 @@ static const char *child_func(struct child_data *data, int *errno_ptr) {
 				break;
 		}
 	}
-	if (ctrtool_syscall_errno(SYS_prctl, errno_ptr, PR_SET_DUMPABLE, 0, 0, 0, 0, 0)) {
-		return "!PR_SET_DUMPABLE";
+	if (!data->debug_dumpable) {
+		if (ctrtool_syscall_errno(SYS_prctl, errno_ptr, PR_SET_DUMPABLE, 0, 0, 0, 0, 0)) {
+			return "!PR_SET_DUMPABLE";
+		}
 	}
 	/* step 12: redirect stderr/stdout */
 	if (data->log_fd != -1) {
@@ -414,6 +419,7 @@ int ctr_scripts_container_launcher_main(int argc, char **argv) {
 		{"uid", required_argument, NULL, 'S'},
 		{"uid-map", required_argument, NULL, 70004},
 		{"unsafe", no_argument, NULL, 'E'},
+		{"unsafe-debug-dumpable", no_argument, NULL, 70018},
 		{"unsafe-no-escape", no_argument, NULL, 70017},
 		{"user", no_argument, NULL, 'U'},
 		{"userns-fd", required_argument, NULL, 'f'},
@@ -732,6 +738,9 @@ invalid_propagation:
 				break;
 			case 70017:
 				unsafe_no_escape = 1;
+				break;
+			case 70018:
+				data_to_process.debug_dumpable = 1;
 				break;
 			default:
 				fprintf(stderr, "Usage: %s [-flags] [program] [arguments]\n"
