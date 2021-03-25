@@ -811,6 +811,10 @@ invalid_propagation:
 			fputs("attempting to mount /proc with unsafe propagation or without CLONE_NEWNS, use -E to override\n", stderr);
 			return 1;
 		}
+		if ((userns_fd == -1) && current_nsenter_point) {
+			fputs("attempting to use --nsenter without -f, use -E to override\n", stderr);
+			return 1;
+		}
 	}
 	if (!unsafe_no_escape) {
 		if (!has_escaped) {
@@ -856,7 +860,7 @@ invalid_propagation:
 		if (setenv("CTRTOOL_CONTAINER_LAUNCHER_EXEC_FD", env_buf, 1)) return 1;
 	}
 
-	if ((userns_fd == -2) || (userns_fd >= 0)) {
+	if ((userns_fd <= -2) || (userns_fd >= 0)) {
 		/* FIXME: maybe make this optional? */
 		if (userns_fd >= 0) {
 			if (setns(userns_fd, CLONE_NEWUSER)) {
