@@ -278,7 +278,7 @@ static const char *child_func(struct child_data *data, int *errno_ptr) {
 	/* step 11.5: process nsenter post requests */
 	for (int i = 0; i < NSENTER_REQUESTS_MAX; i++) {
 		if (!nsenter_post_requests[i]) break;
-		switch (cl_nsenter_params(nsenter_post_requests[i], errno_ptr)) {
+		switch (cl_nsenter_params(nsenter_post_requests[i], errno_ptr, 0)) {
 			case 0:
 				break;
 			case -2:
@@ -882,7 +882,7 @@ invalid_propagation:
 		}
 		for (int i = 0; i < NSENTER_REQUESTS_MAX; i++) {
 			if (!nsenter_requests[i]) break;
-			switch (cl_nsenter_params(nsenter_requests[i], &errno_ptr)) {
+			switch (cl_nsenter_params(nsenter_requests[i], &errno_ptr, 1)) {
 				case 0:
 					break;
 				case -2:
@@ -974,7 +974,7 @@ invalid_propagation:
 	}
 	for (int i = 0; i < NSENTER_REQUESTS_MAX; i++) {
 		if (!nsenter_requests[i]) break;
-		switch (cl_nsenter_params(nsenter_requests[i], &errno_ptr)) {
+		switch (cl_nsenter_params(nsenter_requests[i], &errno_ptr, 1)) {
 			case 0:
 				break;
 			case -2:

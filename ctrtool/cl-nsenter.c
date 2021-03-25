@@ -22,7 +22,7 @@ static int cl_enter_proc(int proc_fd, const char *name, int nstype, int req_mask
 	ctrtool_syscall(SYS_close, fd, 0, 0, 0, 0, 0);
 	return -!!return_value;
 }
-int cl_nsenter_params(const char *param, int *errno_ptr) {
+int cl_nsenter_params(const char *param, int *errno_ptr, int is_pre) {
 	int flags = 0;
 	const char *p = param;
 	int fd = -1;
@@ -43,6 +43,10 @@ int cl_nsenter_params(const char *param, int *errno_ptr) {
 				flags |= CLONE_NEWNET;
 				break;
 			case 'p':
+				if (is_pre) {
+					*errno_ptr = EINVAL;
+					return -1;
+				}
 				flags |= CLONE_NEWPID;
 				break;
 			case 'U':

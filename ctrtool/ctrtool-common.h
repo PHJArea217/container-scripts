@@ -16,7 +16,7 @@ struct ctrtool_rlimit {
 	struct rlimit limit_value;
 };
 void ctrtool_cheap_perror(const char *str, int errno_);
-int cl_nsenter_params(const char *param, int *errno_ptr);
+int cl_nsenter_params(const char *param, int *errno_ptr, int is_pre);
 int ctrtool_install_seccomp_from_fd(int fd, struct sock_fprog *result);
 int ctrtool_close_range(int min_fd, int max_fd, unsigned int flags);
 int ctrtool_close_range_compat(int min_fd, int max_fd, unsigned int flags);
