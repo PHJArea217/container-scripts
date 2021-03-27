@@ -18,6 +18,7 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/sendfile.h>
+#include <assert.h>
 static int int32_to_num(uint32_t num, char *result) {
 	static char digits[] = "0123456789";
 	result[9] = digits[num % 10];
@@ -452,6 +453,16 @@ int ctrtool_save_argv(int argc, char **argv) {
 	}
 	ctrtool_saved_argv = new_argv;
 	return 0;
+}
+void ctrtool_clear_saved_argv(void) {
+	assert(ctrtool_saved_argv);
+	char **argv_p = ctrtool_saved_argv;
+	while (argv_p[0]) {
+		free(argv_p[0]);
+		argv_p++;
+	}
+	free(ctrtool_saved_argv);
+	ctrtool_saved_argv = NULL;
 }
 int ctrtool_escape(void) {
 	if (ctrtool_already_escaped) return 0;

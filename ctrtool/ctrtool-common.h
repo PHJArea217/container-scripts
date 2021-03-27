@@ -32,3 +32,4 @@ int ctrtool_parse_int_array(const char *input_str, struct iovec *result, unsigne
 int ctrtool_parse_rlimit(const char *spec, struct ctrtool_rlimit *result);
 int ctrtool_escape(void);
 int ctrtool_save_argv(int argc, char **argv);
+void ctrtool_clear_saved_argv(void);

@@ -13,7 +13,7 @@ ctrtool-static: ctrtool.a arch/current/arch.a
 ctrtool: ctrtool.a arch/current/arch.a
 	$(CCLD) $(CCLDFLAGS) -o $@ $^
 
-ctrtool.a: container-launcher.o cl-nsenter.o ctrtool-common.o container-rootfs-mount.o debug_shell.o mini-init.o mount_seq.o ns_open_file.o reset_cgroup.o set_fds.o simple-renameat2.o main.o
+ctrtool.a: container-launcher.o cl-nsenter.o ctrtool-common.o container-rootfs-mount.o debug_shell.o mini-init.o mount_seq.o ns_open_file.o reset_cgroup.o set_fds.o simple-renameat2.o syslogd.o main.o
 	$(AR) r $@ $^
 
 arch/current/arch.a:
