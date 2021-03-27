@@ -52,6 +52,7 @@ struct child_data {
 	unsigned exec_fd_is_memfd:1;
 	unsigned debug_dumpable:1;
 	unsigned fork_mode:2;
+	unsigned clear_caps_before_exec:1;
 
 	int notify_parent_fd;
 	int wait_fd;
@@ -297,6 +298,10 @@ static const char *child_func(struct child_data *data, int *errno_ptr) {
 			return "!PR_SET_DUMPABLE";
 		}
 	}
+
+	if (data->clear_caps_before_exec) {
+		if (ctrtool_prepare_caps_for_exec(errno_ptr)) return "!ctrtool_prepare_caps_for_exec";
+	}
 	/* step 12: redirect stderr/stdout */
 	if (data->log_fd != -1) {
 		if (ctrtool_syscall_errno(SYS_dup3, errno_ptr, data->log_fd, 1, 0, 0, 0, 0) != 1) return "!dup3";
@@ -367,10 +372,13 @@ int ctr_scripts_container_launcher_main(int argc, char **argv) {
 	rlimit_list.elem_size = sizeof(struct ctrtool_rlimit);
 	int has_escaped = 0;
 	int unsafe_no_escape = 0;
+	int clear_caps_before_exec = 2;
+	int clear_caps_before_exec_default = 0;
 	static struct option long_options[] = {
 		{"ambient-caps", required_argument, NULL, 'a'},
 		{"bounding-caps", required_argument, NULL, 'b'},
 		{"cgroup", no_argument, NULL, 'C'},
+		{"clear-caps-before-exec", optional_argument, NULL, 70019},
 		{"clearenv", no_argument, NULL, 'V'},
 		{"close-fd", required_argument, NULL, 70013},
 		{"disable-setgroups", no_argument, NULL, 70006},
@@ -445,6 +453,7 @@ int ctr_scripts_container_launcher_main(int argc, char **argv) {
 				clone_flags |= CLONE_NEWPID;
 				break;
 			case 'U':
+				clear_caps_before_exec_default = 1;
 				clone_flags |= CLONE_NEWUSER;
 				break;
 			case 'u':
@@ -491,6 +500,7 @@ int ctr_scripts_container_launcher_main(int argc, char **argv) {
 				}
 				break;
 			case 'b':
+				clear_caps_before_exec_default = 1;
 				convert_uint64(optarg, &data_to_process.bounding_caps);
 				data_to_process.set_bounding = 1;
 				break;
@@ -506,6 +516,7 @@ int ctr_scripts_container_launcher_main(int argc, char **argv) {
 					fputs("userns fd out of range\n", stderr);
 					return 1;
 				}
+				clear_caps_before_exec_default = 1;
 				userns_fd = userns_fd64;
 				break;
 			case 'B':
@@ -574,6 +585,7 @@ invalid_propagation:
 				if (command_shell == NULL) exit(1);
 				break;
 			case 'r':
+				clear_caps_before_exec_default = 1;
 				free(data_to_process.pivot_root_dir);
 				data_to_process.pivot_root_dir = ctrtool_strdup(optarg);
 				if (data_to_process.pivot_root_dir == NULL) exit(1);
@@ -666,6 +678,7 @@ invalid_propagation:
 				data_to_process.exec_fd = -2;
 				break;
 			case 70009:
+				clear_caps_before_exec_default = 1;
 				if (current_nsenter_point >= NSENTER_REQUESTS_MAX) {
 					fprintf(stderr, "Maximum of %d nsenter requests are allowed\n", NSENTER_REQUESTS_MAX);
 					return 1;
@@ -675,6 +688,7 @@ invalid_propagation:
 				nsenter_requests[current_nsenter_point++] = nsenter_request;
 				break;
 			case 70010:
+				clear_caps_before_exec_default = 1;
 				if (current_nsenter_post_point >= NSENTER_REQUESTS_MAX) {
 					fprintf(stderr, "Maximum of %d nsenter-post requests are allowed\n", NSENTER_REQUESTS_MAX);
 					return 1;
@@ -684,9 +698,11 @@ invalid_propagation:
 				nsenter_post_requests[current_nsenter_post_point++] = nsenter_post_request;
 				break;
 			case 70011:
+				clear_caps_before_exec_default = 1;
 				data_to_process.fork_mode = 1;
 				break;
 			case 70012:
+				clear_caps_before_exec_default = 1;
 				data_to_process.fork_mode = 2;
 				break;
 			case 70013:
@@ -741,6 +757,13 @@ invalid_propagation:
 				break;
 			case 70018:
 				data_to_process.debug_dumpable = 1;
+				break;
+			case 70019:
+				if (optarg) {
+					clear_caps_before_exec = !!atoi(optarg);
+				} else {
+					clear_caps_before_exec = 1;
+				}
 				break;
 			default:
 				fprintf(stderr, "Usage: %s [-flags] [program] [arguments]\n"
@@ -800,6 +823,21 @@ invalid_propagation:
 				break;
 		}
 	}
+	if (clear_caps_before_exec == 2) {
+		if (clear_caps_before_exec_default) {
+			if (data_to_process.no_new_privs || (prctl(PR_GET_NO_NEW_PRIVS, 0, 0, 0, 0))) {
+				fprintf(stderr,
+						"The current configuration of flags would automatically enable the internal\n"
+						"clear_caps_before_exec mitigation, but the process would run in NO_NEW_PRIVS\n"
+						"mode, which would mean that the capabilities would be cleared. You must set\n"
+						"the inheritable capabilities (with -I) in this case to set the container's\n"
+						"capabilities, then set --clear-caps-before-exec=1 to acknowledge this message.\n");
+				return 1;
+			}
+		}
+		clear_caps_before_exec = clear_caps_before_exec_default;
+	}
+	data_to_process.clear_caps_before_exec = !!clear_caps_before_exec;
 	if (mount_propagation == MS_BIND) {
 		mount_propagation = (clone_flags & CLONE_NEWNS) ? MS_SLAVE : 0;
 	}

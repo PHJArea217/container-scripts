@@ -259,6 +259,43 @@ int ctrtool_load_permitted_caps(void) {
 	}
 	return 0;
 }
+int ctrtool_prepare_caps_for_exec(int *errno_ptr) {
+	struct __user_cap_header_struct cap_h = {_LINUX_CAPABILITY_VERSION_3, 0};
+	struct __user_cap_data_struct cap_d[2] = {0};
+
+	long sys_retval = ctrtool_syscall(SYS_capget, &cap_h, cap_d, 0, 0, 0, 0);
+	if (sys_retval < 0) {
+		if (errno_ptr) {
+			*errno_ptr = -sys_retval;
+		} else {
+			errno = -sys_retval;
+		}
+		return -1;
+	}
+	/* Limit the effective and permitted capabilities to those which
+	 * are already in inheritable. Originally, this would set effective
+	 * and permitted to 0, but it would break ambient capabilities. */
+	cap_d[0].effective = cap_d[0].inheritable & cap_d[0].effective;
+	cap_d[1].effective = cap_d[1].inheritable & cap_d[1].effective;
+	cap_d[0].permitted = cap_d[0].inheritable & cap_d[0].permitted;
+	cap_d[1].permitted = cap_d[1].inheritable & cap_d[1].permitted;
+#if 0
+	cap_d[0].effective = 0;
+	cap_d[1].effective = 0;
+	cap_d[0].permitted = 0;
+	cap_d[1].permitted = 0;
+#endif
+	sys_retval = ctrtool_syscall(SYS_capset, &cap_h, cap_d, 0, 0, 0, 0);
+	if (sys_retval < 0) {
+		if (errno_ptr) {
+			*errno_ptr = -sys_retval;
+		} else {
+			errno = -sys_retval;
+		}
+		return -1;
+	}
+	return 0;
+}
 int ctrtool_parse_int_array(const char *input_str, struct iovec *result, unsigned int i_size) {
 	if (i_size > sizeof(unsigned long long)) {
 		errno = EINVAL;
