@@ -130,7 +130,7 @@ all_three_octal_done:
 			break;
 		}
 	}
-	puts(tmp_buf);
+//	puts(tmp_buf);
 	struct tm u_time = {0};
 	struct timespec my_time = {0, 0};
 	clock_gettime(CLOCK_REALTIME, &my_time);
