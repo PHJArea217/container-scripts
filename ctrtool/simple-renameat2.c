@@ -1,4 +1,5 @@
 #define _GNU_SOURCE
+#include "ctrtool-common.h"
 #include <unistd.h>
 #include <fcntl.h>
 #include <stdlib.h>
@@ -7,6 +8,7 @@
 #include <getopt.h>
 #include <errno.h>
 int ctr_scripts_simple_renameat2_main(int argc, char **argv) {
+	ctrtool_clear_saved_argv();
 	int source_fd = AT_FDCWD;
 	int target_fd = AT_FDCWD;
 	int rename_flags = 0;

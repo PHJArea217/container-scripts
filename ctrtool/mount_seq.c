@@ -330,6 +330,7 @@ static int process_cmd(struct mount_seq *s) {
 	return 0;
 }
 int ctr_scripts_mount_seq_main(int argc, char **argv) {
+	ctrtool_clear_saved_argv();
 	struct mount_seq *current = NULL;
 	struct mount_seq *m_list = NULL;
 	size_t m_list_size = 0;

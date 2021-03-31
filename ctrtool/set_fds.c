@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <unistd.h>
 int ctr_scripts_set_fds_main(int argc, char **argv) {
+	ctrtool_clear_saved_argv();
 	char *fd_list = NULL;
 	int do_set_listen_fds = 0;
 	int opt = 0;

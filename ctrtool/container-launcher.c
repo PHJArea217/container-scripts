@@ -823,6 +823,7 @@ invalid_propagation:
 				break;
 		}
 	}
+	ctrtool_clear_saved_argv();
 	if (clear_caps_before_exec == 2) {
 		if (clear_caps_before_exec_default) {
 			if (data_to_process.no_new_privs || (prctl(PR_GET_NO_NEW_PRIVS, 0, 0, 0, 0))) {

@@ -11,6 +11,7 @@
 #include <signal.h>
 #include <fcntl.h>
 int ctr_scripts_debug_shell_main(int argc, char **argv) {
+	ctrtool_clear_saved_argv();
 	int accept_fd = 0;
 	int opt = 0;
 	char **shell_command = NULL;

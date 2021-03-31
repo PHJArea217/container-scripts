@@ -21,6 +21,7 @@ static void write_cgroup(int base_fd, const char *controller_name, const char *p
 	close(write_fd);
 }
 int ctr_scripts_reset_cgroup_main(int argc, char **argv) {
+	ctrtool_clear_saved_argv();
 	const char *base_path = "/sys/fs/cgroup";
 	const char *controllers = "blkio,cpu,devices,freezer,memory,perf_event,pids,rdma";
 	const char *addl_controllers = NULL;

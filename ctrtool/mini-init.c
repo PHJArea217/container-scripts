@@ -152,6 +152,7 @@ static void run_script(const char *name, int sig) {
 }
 
 static int ctr_scripts_mini_init_main_c(int argc, char **argv, int new_version) {
+	ctrtool_clear_saved_argv();
 	struct process_state *all_procs = NULL;
 	unsigned int current_signal = 0;
 #if 0

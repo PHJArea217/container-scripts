@@ -1,4 +1,5 @@
 #define _GNU_SOURCE
+#include "ctrtool-common.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -144,6 +145,7 @@ all_three_octal_done:
 	fflush(out_file);
 }
 int ctr_scripts_syslogd_main(int argc, char **argv) {
+	ctrtool_clear_saved_argv();
 	if (argc >= 2) {
 		fprintf(stderr, "Command line arguments currently not supported.\n/dev/log socket on fd 0, writes log messages to stdout\n");
 		return 1;

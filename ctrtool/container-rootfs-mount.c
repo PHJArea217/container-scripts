@@ -207,6 +207,7 @@ x_wait2:
 	return -1;
 }
 int ctr_scripts_container_rootfs_mount_main(int argc, char **argv) {
+	ctrtool_clear_saved_argv();
 	int opt = 0;
 	char *mount_proc_only = NULL;
 	while ((opt = getopt(argc, argv, "o:p:t")) > 0) {

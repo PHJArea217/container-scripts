@@ -112,6 +112,7 @@ close_f_fail:
 	return -1;
 }
 int ctr_scripts_ns_open_file_main(int argc, char **argv) {
+	ctrtool_clear_saved_argv();
 	struct ctrtool_arraylist things_to_add = {0};
 	things_to_add.elem_size = sizeof(struct ns_open_file_req);
 	struct ns_open_file_req *current = NULL;
