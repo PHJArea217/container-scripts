@@ -1,4 +1,5 @@
 .globl ctrtool_arch_x86_32_clone_onearg, ctrtool_arch_x86_32_syscall, ctrtool_arch_x86_32_syscall_int_0x80, ctrtool_arch_x86_32_exit
+.align 8
 ctrtool_arch_x86_32_exit:
 	endbr32
 	xor %eax, %eax
@@ -8,6 +9,7 @@ ctrtool_arch_x86_32_exit:
 x:
 	hlt
 	jmp x
+.align 8
 ctrtool_arch_x86_32_clone_onearg:
 	endbr32
 	push %ebx
@@ -26,6 +28,7 @@ ctrtool_arch_x86_32_clone_onearg:
 	pop %ebx
 	ret
 
+.align 8
 ctrtool_arch_x86_32_syscall:
 	endbr32
 	push %ebx
@@ -46,6 +49,7 @@ ctrtool_arch_x86_32_syscall:
 	pop %ebx
 	ret
 
+.align 8
 ctrtool_arch_x86_32_syscall_int_0x80:
 	endbr32
 	push %ebx
