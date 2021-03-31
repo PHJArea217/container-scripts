@@ -13,7 +13,6 @@
 #include <signal.h>
 #include <wait.h>
 #include <string.h>
-#define CTRTOOL_CLOSE_NO_ERROR(fd) ctrtool_syscall(SYS_close, fd, 0, 0, 0, 0, 0)
 int ctrtool_open_tty_proxy(struct ctrtool_tty_proxy *options) {
 	if (options->width < 0) options->width = 0;
 	if (options->height < 0) options->height = 0;

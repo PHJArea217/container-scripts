@@ -1,6 +1,7 @@
 #include <linux/filter.h>
 #include <sys/types.h>
 #include <sys/uio.h>
+#include <stdint.h>
 #include <sys/resource.h>
 #include "arch/current/arch-functions.h"
 struct ctrtool_arraylist {
@@ -15,6 +16,7 @@ struct ctrtool_rlimit {
 	unsigned change_hard:1;
 	struct rlimit limit_value;
 };
+int ctrtool_int32_to_num(uint32_t num, char *result);
 void ctrtool_cheap_perror(const char *str, int errno_);
 int cl_nsenter_params(const char *param, int *errno_ptr, int is_pre);
 int ctrtool_install_seccomp_from_fd(int fd, struct sock_fprog *result);
@@ -35,3 +37,4 @@ int ctrtool_save_argv(int argc, char **argv);
 void ctrtool_clear_saved_argv(void);
 int ctrtool_prepare_caps_for_exec(int *errno_ptr);
 int ctrtool_make_fd_nonblocking(int fd, int nonblock);
+#define CTRTOOL_CLOSE_NO_ERROR(fd) ctrtool_syscall(SYS_close, fd, 0, 0, 0, 0, 0)

@@ -19,7 +19,7 @@
 #include <sys/stat.h>
 #include <sys/sendfile.h>
 #include <assert.h>
-static int int32_to_num(uint32_t num, char *result) {
+int ctrtool_int32_to_num(uint32_t num, char *result) {
 	static char digits[] = "0123456789";
 	result[9] = digits[num % 10];
 	num /= 10;
@@ -53,7 +53,7 @@ void ctrtool_cheap_perror(const char *str, int errno_) {
 		s++;
 	}
 	char b[10];
-	int32_to_num(errno_, b);
+	ctrtool_int32_to_num(errno_, b);
 	struct iovec iov[] = {
 		{(void *) str, l},
 		{": errno ", 8},
@@ -188,11 +188,11 @@ void ctrtool_mini_init_set_listen_pid_fds(int nr_fds) {
 	memset(value_buf, 0, 12);
 	pid_t current_pid = getpid();
 	if (current_pid <= 0) _exit(127);
-	int p = int32_to_num(current_pid, value_buf);
+	int p = ctrtool_int32_to_num(current_pid, value_buf);
 	if (setenv("LISTEN_PID", &value_buf[p], 1)) _exit(127);
 
 	memset(value_buf, 0, 12);
-	p = int32_to_num(nr_fds, value_buf);
+	p = ctrtool_int32_to_num(nr_fds, value_buf);
 	if (setenv("LISTEN_FDS", &value_buf[p], 1)) _exit(127);
 }
 char *ctrtool_strdup(const char *str) {

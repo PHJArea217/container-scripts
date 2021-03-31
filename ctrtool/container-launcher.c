@@ -147,43 +147,48 @@ static const char *child_func(struct child_data *data, int *errno_ptr) {
 	if (data->mount_propagation) {
 		if (mount(NULL, "/", NULL, MS_REC|data->mount_propagation, NULL)) return "mount /proc";
 	}
+	int devnull_fd = -1;
+	if (data->log_fd >= 0) {
+		int devnull_fd = ctrtool_syscall_errno(SYS_openat, errno_ptr, AT_FDCWD, "/dev/null", O_RDONLY, 0, 0, 0);
+		if (devnull_fd < 0) return "!open /dev/null";
+	}
 	if (data->notify_parent_fd >= 0) {
 		/* step 2: notify parent */
 		if (write(data->notify_parent_fd, "\0", 1) != 1) return "notify fd";
 		close(data->notify_parent_fd);
 		/* step 3: wait for script */
 		char buf = 0;
-		if (read(data->wait_fd, &buf, 1) != 1) return "notify fd";
-		close(data->wait_fd);
+		if (ctrtool_syscall_errno(SYS_read, errno_ptr, data->wait_fd, &buf, 1, 0, 0, 0) != 1) return "!notify fd";
+		CTRTOOL_CLOSE_NO_ERROR(data->wait_fd);
 		__sync_synchronize();
 		if (data->shared_mem_region) {
 			if (data->shared_mem_region[0] != 123456789) {
-				return "notify fd";
+				return "!notify fd";
 			}
 		}
 	}
 
 	if (data->make_cgroup) {
-		if (unshare(CLONE_NEWCGROUP)) return "CLONE_NEWCGROUP";
+		if (ctrtool_syscall_errno(SYS_unshare, errno_ptr, CLONE_NEWCGROUP, 0, 0, 0, 0, 0)) return "!CLONE_NEWCGROUP";
 	}
 
 	/* Seal the executable file, if we used memfd */
 	if (data->exec_fd_is_memfd) {
-		if (fcntl(data->exec_fd, F_ADD_SEALS, F_SEAL_SEAL|F_SEAL_WRITE|F_SEAL_SHRINK|F_SEAL_GROW)) {
-			return "F_ADD_SEALS";
+		if (ctrtool_syscall_errno(SYS_fcntl, errno_ptr, data->exec_fd, F_ADD_SEALS, F_SEAL_SEAL|F_SEAL_WRITE|F_SEAL_SHRINK|F_SEAL_GROW, 0, 0, 0)) {
+			return "!F_ADD_SEALS";
 		}
 		/* Rewind back to the starting position, so that in a common case where the script writes
 		 * to the memfd directly, we don't instantly see EOF.
 		 */
-		if (lseek(data->exec_fd, 0, SEEK_SET)) {
-			return "lseek";
+		if (ctrtool_syscall_errno(SYS_lseek, errno_ptr, data->exec_fd, 0, SEEK_SET, 0, 0, 0)) {
+			return "!lseek";
 		}
 	}
 
 	/* step 4: set capabilities */
 	struct __user_cap_header_struct cap_h = {_LINUX_CAPABILITY_VERSION_3, 0};
 	struct __user_cap_data_struct cap_d[2] = {{0}};
-	if (ctrtool_syscall_errno(SYS_capget, errno_ptr, &cap_h, (cap_user_data_t) &cap_d, 0, 0, 0, 0)) return "capget";
+	if (ctrtool_syscall_errno(SYS_capget, errno_ptr, &cap_h, (cap_user_data_t) &cap_d, 0, 0, 0, 0)) return "!capget";
 	uint64_t current_permitted = ((uint64_t) cap_d[1].permitted) << 32 | ((uint64_t) cap_d[0].permitted);
 	uint64_t current_inheritable = ((uint64_t) cap_d[1].inheritable) << 32 | ((uint64_t) cap_d[0].inheritable);
 	
@@ -198,20 +203,17 @@ static const char *child_func(struct child_data *data, int *errno_ptr) {
 	cap_h.version = _LINUX_CAPABILITY_VERSION_3;
 	cap_h.pid = 0;
 
-	if (ctrtool_syscall_errno(SYS_capset, errno_ptr, &cap_h, (cap_user_data_t) &cap_d, 0, 0, 0, 0)) return "capset";
+	if (ctrtool_syscall_errno(SYS_capset, errno_ptr, &cap_h, (cap_user_data_t) &cap_d, 0, 0, 0, 0)) return "!capset";
 
 	/* step 5: change uid/gid with keepcaps enabled */
-	if (!data->no_setgroups && setgroups(data->supp_groups.iov_len, (gid_t *) data->supp_groups.iov_base)) return "setgroups";
-	free(data->supp_groups.iov_base);
-	data->supp_groups.iov_base = NULL;
-	data->supp_groups.iov_len = 0;
+	if (!data->no_setgroups && ctrtool_syscall_errno(SYS_setgroups, errno_ptr, data->supp_groups.iov_len, data->supp_groups.iov_base, 0, 0, 0, 0)) return "!setgroups";
 	if (!data->no_uidgid) {
-		if ((data->set_inheritable || data->keepcaps) && prctl(PR_SET_KEEPCAPS, 1, 0, 0, 0)) return "PR_SET_KEEPCAPS";
-		if (setresgid(data->gid, data->gid, data->gid)) return "setgid";
-		if (setresuid(data->uid, data->uid, data->uid)) return "setuid";
+		if ((data->set_inheritable || data->keepcaps) && ctrtool_syscall_errno(SYS_prctl, errno_ptr, PR_SET_KEEPCAPS, 1, 0, 0, 0, 0)) return "!PR_SET_KEEPCAPS";
+		if (ctrtool_syscall_errno(SYS_setresgid, errno_ptr, data->gid, data->gid, data->gid, 0, 0, 0)) return "!setgid";
+		if (ctrtool_syscall_errno(SYS_setresuid, errno_ptr, data->uid, data->uid, data->uid, 0, 0, 0)) return "!setuid";
 		/* setuid clears effective set but not permitted, try to restore those capabilities if possible */
 		if (data->set_inheritable || data->keepcaps) {
-			if (ctrtool_syscall_errno(SYS_capset, errno_ptr, &cap_h, (cap_user_data_t) &cap_d, 0, 0, 0, 0)) return "capset";
+			if (ctrtool_syscall_errno(SYS_capset, errno_ptr, &cap_h, (cap_user_data_t) &cap_d, 0, 0, 0, 0)) return "!capset";
 		}
 	}
 
@@ -219,24 +221,28 @@ static const char *child_func(struct child_data *data, int *errno_ptr) {
 	uint64_t ambient_caps = data->inh_ambient ? current_inheritable : data->ambient_caps;
 	for (int i = 0; i < 64; i++) {
 		if (ambient_caps & (1ULL << i)) {
-			if (prctl(PR_CAP_AMBIENT, PR_CAP_AMBIENT_RAISE, i, 0, 0)) return "PR_CAP_AMBIENT_RAISE";
+			if (ctrtool_syscall_errno(SYS_prctl, errno_ptr, PR_CAP_AMBIENT, PR_CAP_AMBIENT_RAISE, i, 0, 0, 0)) return "!PR_CAP_AMBIENT_RAISE";
 		}
 	}
-
+#define ctrtool_prctl(a, b, c, d, e) ctrtool_syscall_errno(SYS_prctl, errno_ptr, a, b, c, d, e, 0)
 	/* step 7: clear bounding set */
 	if (data->set_bounding) {
 		for (int i = 0; i < 64; i++) {
-			int r = prctl(PR_CAPBSET_READ, i, 0, 0, 0);
-			if ((r < 0) && (errno == EINVAL)) break;
-			if (r < 0) return "PR_CAPBSET_READ";
+			int r = ctrtool_prctl(PR_CAPBSET_READ, i, 0, 0, 0);
+			if ((r < 0) && (*errno_ptr == EINVAL)) break;
+			if (r < 0) return "!PR_CAPBSET_READ";
 			if (r == 1) {
 				if (!(data->bounding_caps & (1ULL << i))) {
-					if (prctl(PR_CAPBSET_DROP, i, 0, 0, 0)) return "PR_CAPBSET_DROP";
+					if (ctrtool_prctl(PR_CAPBSET_DROP, i, 0, 0, 0)) return "!PR_CAPBSET_DROP";
 				}
 			}
 			if (r == 0) {
 				if (data->bounding_caps & (1ULL << i)) {
-					fprintf(stderr, "Capability %d not in bounding set\n", i);
+					ctrtool_syscall(SYS_write, 2, "Capability not in bounding set: ", 32, 0, 0, 0);
+					char num_buf[12] = {0};
+					ctrtool_int32_to_num(i, num_buf);
+					num_buf[10] = '\n';
+					ctrtool_syscall(SYS_write, 2, num_buf, 11, 0, 0, 0);
 					return "!";
 				}
 			}
@@ -244,26 +250,22 @@ static const char *child_func(struct child_data *data, int *errno_ptr) {
 	}
 
 	/* step 8: set securebits */
-	if (data->set_securebits && prctl(PR_SET_SECUREBITS, data->securebits, 0, 0, 0)) return "PR_SET_SECUREBITS";
+	if (data->set_securebits && ctrtool_prctl(PR_SET_SECUREBITS, data->securebits, 0, 0, 0)) return "!PR_SET_SECUREBITS";
 
 	if (data->set_thp) {
-		if (prctl(PR_SET_THP_DISABLE, !!(data->set_thp == 1), 0, 0, 0)) {
-			return "PR_SET_THP_DISABLE";
+		if (ctrtool_prctl(PR_SET_THP_DISABLE, !!(data->set_thp == 1), 0, 0, 0)) {
+			return "!PR_SET_THP_DISABLE";
 		}
 	}
 	if (data->set_timerslack) {
-		if (prctl(PR_SET_TIMERSLACK, data->timerslack_ns, 0, 0, 0)) {
-			return "PR_SET_TIMERSLACK";
+		if (ctrtool_prctl(PR_SET_TIMERSLACK, data->timerslack_ns, 0, 0, 0)) {
+			return "!PR_SET_TIMERSLACK";
 		}
 	}
 
 	/* step 8.5: open /dev/null as stdin */
-	if (data->log_fd != -1) {
-		int devnull_fd = open("/dev/null", O_RDONLY);
-		if (devnull_fd < 0) return "open /dev/null";
-		if ((devnull_fd > 0) && dup2(devnull_fd, 0)) return "dup2 /dev/null";
-		if (devnull_fd > 0) close(devnull_fd);
-	}
+	if ((devnull_fd > 0) && ctrtool_syscall_errno(SYS_dup3, errno_ptr, devnull_fd, 0, 0, 0, 0, 0)) return "!dup2 /dev/null";
+	if (devnull_fd > 0) CTRTOOL_CLOSE_NO_ERROR(devnull_fd);
 	/* step 9: pivot_root */
 	if (data->pivot_root_dir) {
 		if (!data->debug_dumpable) {
@@ -271,7 +273,7 @@ static const char *child_func(struct child_data *data, int *errno_ptr) {
 				return "!PR_SET_DUMPABLE";
 			}
 		}
-		if (chdir(data->pivot_root_dir)) return "cd pivot_root_dir";
+		if (ctrtool_syscall_errno(SYS_chdir, errno_ptr, data->pivot_root_dir, 0, 0, 0, 0, 0)) return "!cd pivot_root_dir";
 		/* EVERYTHING BELOW HERE IS ASSUMED TO BE EXTREMELY DANGEROUS SINCE THE ROOT FS HAS CHANGED */
 		/* AND A MALICIOUS CONTAINER ROOTFS COULD ALLOW ACCESS TO THE HOST'S ROOT FS */
 		/* (ref: https://nvd.nist.gov/vuln/detail/CVE-2019-14271) */
