@@ -1,5 +1,6 @@
 #define _GNU_SOURCE
 #include "ctrtool-common.h"
+#include "ctrtool_options.h"
 #include <ctype.h>
 #include <errno.h>
 #include <getopt.h>
@@ -14,39 +15,14 @@
 #include <signal.h>
 #include <sched.h>
 #include <fcntl.h>
-struct opt_element {
-	const char *name;
-	union {
-		void *ptr;
-		uint64_t value;
-	} value;
-};
-struct cl_args {
-	char *name;
-	char *value;
-};
-/*
- * TODO dynamic memory allocation for this
- * May also want to put this in a common library for convenience
- */
-static struct cl_args my_args[256] = {{0}};
-#define ARRAY_SIZE(a) (sizeof(a)/sizeof(a[0]))
-static struct opt_element boolean_values[] = {
-	{.name = "false", .value = {.value = 0}},
-	{.name = "no", .value = {.value = 0}},
-	{.name = "off", .value = {.value = 0}},
-	{.name = "on", .value = {.value = 1}},
-	{.name = "true", .value = {.value = 1}},
-	{.name = "yes", .value = {.value = 1}}
-};
-static struct opt_element devfs_opts[] = {
+static struct ctrtool_opt_element devfs_opts[] = {
 	{.name = "bind_host", .value = {.value = 0x00000aaa}},
 	{.name = "bind_host_v2", .value = {.value = 0x00002aaa}},
 	{.name = "none", .value = {.value = 0}},
 	{.name = "symlink_host", .value = {.value = 0x00000555}},
 	{.name = "symlink_host_v2", .value = {.value = 0x00001555}}
 };
-static struct opt_element root_link_opts[] = {
+static struct ctrtool_opt_element root_link_opts[] = {
 	{.name = "all_dirs", .value = {.value = 0xffffffff}},
 	{.name = "all_ro", .value = {.value = 0x55555555}},
 	{.name = "all_rw", .value = {.value = 0xaaaaaaaa}},
@@ -55,82 +31,6 @@ static struct opt_element root_link_opts[] = {
 	{.name = "usr_ro_tmp", .value = {.value = 0xffff5555}},
 	{.name = "usr_rw_tmp", .value = {.value = 0xffffaaaa}}
 };
-static size_t my_args_size = 0;
-static int compare_args(const void *a, const void *b) {
-	return strcasecmp(((struct cl_args *) a)->name, ((struct cl_args *) b)->name);
-}
-static int compare_opts(const void *a, const void *b) {
-	return strcasecmp(((struct opt_element *) a)->name, ((struct opt_element *) b)->name);
-}
-static char *get_arg(const char *name) {
-	struct cl_args req_arg = {(char *) name, 0};
-	void *result = bsearch(&req_arg, my_args, my_args_size, sizeof(struct cl_args), compare_args);
-	return result ? ((struct cl_args *) result)->value : NULL;
-}
-static uint64_t parse_arg_int(const char *arg, const char *error_msg, int *has_error, uint64_t default_value) {
-	if (!arg) {
-		if (has_error) *has_error = 0;
-		return default_value;
-	}
-	if (isdigit(arg[0])) {
-		if (has_error) *has_error = 0;
-		return strtoull(arg, NULL, 0);
-	}
-	if (has_error) *has_error = 1;
-	if (error_msg) {
-		fprintf(stderr, "%s: %s\n", error_msg, arg);
-		exit(1);
-	}
-	return -1;
-}
-static struct opt_element *parse_arg_enum(const char *arg, struct opt_element *values, size_t nr_values, const char *error_msg, int *has_error, struct opt_element *default_value) {
-	if (!arg) {
-		if (has_error) *has_error = 0;
-		return default_value;
-	}
-	struct opt_element req_arg = {(char *) arg, {0}};
-	void *result = bsearch(&req_arg, values, nr_values, sizeof(struct opt_element), compare_opts);
-	if (result) {
-		if (has_error) *has_error = 0;
-		return (struct opt_element *) result;
-	}
-	if (has_error) *has_error = 1;
-	if (error_msg) {
-		fprintf(stderr, "%s: %s\n", error_msg, arg);
-		exit(1);
-	}
-	return NULL;
-}
-static uint64_t parse_arg_int_with_preset(const char *arg, struct opt_element *values, size_t nr_values, const char *error_msg, uint64_t default_value) {
-	if (!error_msg) {
-		error_msg = "Invalid int/preset option";
-	}
-	int has_error = 0;
-	uint64_t result = parse_arg_int(arg, NULL, &has_error, default_value);
-	if (has_error) {
-		struct opt_element *result2 = parse_arg_enum(arg, values, nr_values, error_msg, NULL, NULL);
-		return result2->value.value;
-	}
-	return result;
-}
-static int parse_arg_bool(const char *arg, const char *error_msg, int default_value) {
-	if (!error_msg) {
-		error_msg = "Invalid boolean";
-	}
-	if (!arg) {
-		return !!default_value;
-	}
-	int has_error = 0;
-	uint64_t result = parse_arg_int(arg, NULL, &has_error, 0);
-	if (has_error) {
-		struct opt_element *elem = parse_arg_enum(arg, boolean_values, sizeof(boolean_values)/sizeof(boolean_values[0]), error_msg, NULL, NULL);
-		return !!elem->value.value;
-	}
-	return !!result;
-}
-static char *get_arg_default(char *arg, char *default_value) {
-	return arg ? arg : default_value;
-}
 static int check_syscall(int result, const char *error_msg) {
 	if (result < 0) {
 		unsigned int saved_errno = errno;
@@ -213,21 +113,10 @@ int ctr_scripts_container_rootfs_mount_main(int argc, char **argv) {
 	while ((opt = getopt(argc, argv, "o:p:t")) > 0) {
 		switch(opt) {
 			case 'o':
-				if (my_args_size >= 256) {
-					fprintf(stderr, "More than 256 options, please report bug!\n");
+				if (ctrtool_options_add_opt(optarg)) {
+					perror("ctrtool_options_add_opt");
 					return 1;
 				}
-				struct cl_args *current_arg = &my_args[my_args_size++];
-				char *strdup_optarg = ctrtool_strdup(optarg);
-				char *b = strchr(strdup_optarg, '=');
-				if (!b) {
-					fprintf(stderr, "No '=' character in option: %s\n", strdup_optarg);
-					return 1;
-				}
-				*b = 0;
-				b++;
-				current_arg->name = strdup_optarg;
-				current_arg->value = b;
 				break;
 			case 'p':
 				mount_proc_only = ctrtool_strdup(optarg);
@@ -243,7 +132,7 @@ int ctr_scripts_container_rootfs_mount_main(int argc, char **argv) {
 		fprintf(stderr, "%s: Mountpoint not specified\n", argv[0]);
 		return 1;
 	}
-	qsort(my_args, my_args_size, sizeof(struct cl_args), compare_args);
+	ctrtool_options_sort_opts();
 	char *mount_directory = ctrtool_strdup(argv[optind]);
 	if (mount_proc_only) {
 		int proc_fd = check_syscall(open(mount_proc_only, O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_NOCTTY), "PID namespace");
@@ -252,8 +141,10 @@ int ctr_scripts_container_rootfs_mount_main(int argc, char **argv) {
 		free(mount_directory);
 		return 0;
 	}
-#define BOOL_FALSE(name) parse_arg_bool(get_arg(name), NULL, 0)
-#define BOOL_TRUE(name) parse_arg_bool(get_arg(name), NULL, 1)
+#define BOOL_FALSE(name) ctrtool_options_parse_arg_bool(ctrtool_options_get_arg(name), NULL, 0)
+#define BOOL_TRUE(name) ctrtool_options_parse_arg_bool(ctrtool_options_get_arg(name), NULL, 1)
+#define get_arg(val) ctrtool_options_get_arg(val)
+#define get_arg_default(val, val2) ctrtool_options_get_arg_default(val, val2)
 	int do_run_dirs = BOOL_TRUE("run_dirs");
 	int do_tmp_world = BOOL_TRUE("tmp_world");
 	int do_mqueue = BOOL_TRUE("mount_mqueue");
@@ -262,11 +153,11 @@ int ctr_scripts_container_rootfs_mount_main(int argc, char **argv) {
 	int do_mount_proc = BOOL_FALSE("mount_proc");
 	int do_systemd_hack = BOOL_FALSE("systemd");
 	int do_alt_root_symlinks = BOOL_FALSE("root_symlink_usr");
-	uint64_t rootfs_opts = parse_arg_int_with_preset(get_arg("root_link_opts"), root_link_opts, ARRAY_SIZE(root_link_opts), "Invalid root_link_opts", 0xaaaaaaaa);
-	uint64_t dev_opts = parse_arg_int_with_preset(get_arg("dev_opts"), devfs_opts, ARRAY_SIZE(devfs_opts), "Invalid dev_opts", 0xaaaaaaaa);
-	check_syscall(umask(parse_arg_int(get_arg("umask"), "Invalid umask", NULL, 022)), "umask");
+	uint64_t rootfs_opts = ctrtool_options_parse_arg_int_with_preset(get_arg("root_link_opts"), root_link_opts, CTRTOOL_ARRAY_SIZE(root_link_opts), "Invalid root_link_opts", 0xaaaaaaaa);
+	uint64_t dev_opts = ctrtool_options_parse_arg_int_with_preset(get_arg("dev_opts"), devfs_opts, CTRTOOL_ARRAY_SIZE(devfs_opts), "Invalid dev_opts", 0xaaaaaaaa);
+	check_syscall(umask(ctrtool_options_parse_arg_int(get_arg("umask"), "Invalid umask", NULL, 022)), "umask");
 	
-	char *mount_proc_s = get_arg("pid_ns");
+	char *mount_proc_s = ctrtool_options_get_arg("pid_ns");
 	int proc_fd = -1;
 	if (mount_proc_s) {
 		proc_fd = check_syscall(open(mount_proc_s, O_RDONLY|O_NONBLOCK|O_NOCTTY|O_CLOEXEC), "PID namespace");
