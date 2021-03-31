@@ -15,6 +15,7 @@
 #include <sys/socket.h>
 #include <sys/mman.h>
 #include <sys/types.h>
+#include <sys/uio.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <string.h>
@@ -33,6 +34,7 @@ struct child_data {
 	uint64_t timerslack_ns;
 	uid_t uid;
 	gid_t gid;
+	struct iovec supp_groups;
 	unsigned no_setgroups:1;
 	unsigned no_uidgid:1;
 	unsigned do_setsid:1;
@@ -199,7 +201,10 @@ static const char *child_func(struct child_data *data, int *errno_ptr) {
 	if (ctrtool_syscall_errno(SYS_capset, errno_ptr, &cap_h, (cap_user_data_t) &cap_d, 0, 0, 0, 0)) return "capset";
 
 	/* step 5: change uid/gid with keepcaps enabled */
-	if (!data->no_setgroups && setgroups(0, NULL)) return "setgroups";
+	if (!data->no_setgroups && setgroups(data->supp_groups.iov_len, (gid_t *) data->supp_groups.iov_base)) return "setgroups";
+	free(data->supp_groups.iov_base);
+	data->supp_groups.iov_base = NULL;
+	data->supp_groups.iov_len = 0;
 	if (!data->no_uidgid) {
 		if ((data->set_inheritable || data->keepcaps) && prctl(PR_SET_KEEPCAPS, 1, 0, 0, 0)) return "PR_SET_KEEPCAPS";
 		if (setresgid(data->gid, data->gid, data->gid)) return "setgid";
@@ -393,6 +398,7 @@ int ctr_scripts_container_launcher_main(int argc, char **argv) {
 		{"fork-daemon", no_argument, NULL, 70012},
 		{"gid", required_argument, NULL, 'G'},
 		{"gid-map", required_argument, NULL, 70005},
+		{"groups", required_argument, NULL, 70100},
 		{"hostname", required_argument, NULL, 'H'},
 		{"inh-caps", required_argument, NULL, 'I'},
 		{"ipc", no_argument, NULL, 'i'},
@@ -765,6 +771,14 @@ invalid_propagation:
 					clear_caps_before_exec = 1;
 				}
 				break;
+			case 70100:
+				free(data_to_process.supp_groups.iov_base);
+				data_to_process.supp_groups.iov_base = NULL;
+				if (ctrtool_parse_int_array(optarg, &data_to_process.supp_groups, sizeof(gid_t))) {
+					perror("ctrtool_parse_int_array");
+					return 1;
+				}
+				break;
 			default:
 				fprintf(stderr, "Usage: %s [-flags] [program] [arguments]\n"
 						"-C     new cgroup namespace\n"
@@ -1116,10 +1130,6 @@ invalid_propagation:
 		ctrtool_exit(127);
 		return 127;
 	}
-	free(data_to_process.close_fds.start);
-	close(pipe_to_child[0]);
-	close(pipe_from_child[1]);
-	close(socketpair_to_child[1]);
 	if (owner_uid != -1) {
 		current_uids[1] = current_uids[2];
 		if (setresuid(current_uids[0], current_uids[1], current_uids[2])) {
@@ -1127,6 +1137,13 @@ invalid_propagation:
 			return 1;
 		}
 	}
+	free(data_to_process.supp_groups.iov_base);
+	data_to_process.supp_groups.iov_base = NULL;
+	data_to_process.supp_groups.iov_len = 0;
+	free(data_to_process.close_fds.start);
+	close(pipe_to_child[0]);
+	close(pipe_from_child[1]);
+	close(socketpair_to_child[1]);
 	char c_buf1[100] = {0};
 	char c_buf2[100] = {0};
 	char c_buf3[100] = {0};
