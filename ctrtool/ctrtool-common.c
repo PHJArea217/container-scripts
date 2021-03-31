@@ -558,3 +558,13 @@ close_fail:
 	close(memfd_fd);
 	return -1;
 }
+int ctrtool_make_fd_nonblocking(int fd, int nonblock) {
+	int orig_fcntl = fcntl(fd, F_GETFL, 0);
+	if (orig_fcntl < 0) return -1;
+	if (nonblock) {
+		if (fcntl(fd, F_SETFL, orig_fcntl | O_NONBLOCK)) return -1;
+	} else {
+		if (fcntl(fd, F_SETFL, orig_fcntl & ~O_NONBLOCK)) return -1;
+	}
+	return !!(orig_fcntl & O_NONBLOCK);
+}

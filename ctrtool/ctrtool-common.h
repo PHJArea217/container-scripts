@@ -34,3 +34,4 @@ int ctrtool_escape(void);
 int ctrtool_save_argv(int argc, char **argv);
 void ctrtool_clear_saved_argv(void);
 int ctrtool_prepare_caps_for_exec(int *errno_ptr);
+int ctrtool_make_fd_nonblocking(int fd, int nonblock);

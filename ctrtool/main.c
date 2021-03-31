@@ -17,6 +17,7 @@ int ctr_scripts_simple_renameat2_main(int argc, char **argv);
 int ctr_scripts_debug_shell_main(int argc, char **argv);
 int ctr_scripts_set_fds_main(int argc, char **argv);
 int ctr_scripts_syslogd_main(int argc, char **argv);
+int ctr_scripts_tty_proxy_main(int argc, char **argv);
 struct command_def {
 	const char *name;
 	int (*main_function)(int, char **);
@@ -52,6 +53,7 @@ static struct command_def command_list[] = {
 	{"set_fds", ctr_scripts_set_fds_main},
 	{"simple-renameat2", ctr_scripts_simple_renameat2_main},
 	{"syslogd", ctr_scripts_syslogd_main},
+	{"tty_proxy", ctr_scripts_tty_proxy_main}
 };
 static int compare_command_def(const void *a, const void *b) {
 	return strcmp(((struct command_def *) a)->name, ((struct command_def *) b)->name);
