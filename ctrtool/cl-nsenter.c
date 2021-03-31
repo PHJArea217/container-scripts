@@ -7,21 +7,29 @@
 #include <stdlib.h>
 #include <syscall.h>
 #include <errno.h>
-static int cl_enter_proc(int proc_fd, const char *name, int nstype, int req_mask, int close_proc_fd, int *errno_ptr) {
-	if (!(req_mask & nstype)) {
+static int cl_enter_proc(int proc_fd, const char *name, int nstype, int req_mask, int close_proc_fd, int *errno_ptr, int stage, int *saved_fd) {
+	if (stage == 1) {
+		if (!(req_mask & nstype)) {
+			if (close_proc_fd) {
+				ctrtool_syscall(SYS_close, proc_fd, 0, 0, 0, 0, 0);
+			}
+			*saved_fd = -1;
+			return 0;
+		}
+		int fd = ctrtool_syscall_errno(SYS_openat, errno_ptr, proc_fd, name, O_RDONLY|O_CLOEXEC|O_NONBLOCK|O_NOCTTY, 0, 0, 0);
 		if (close_proc_fd) {
 			ctrtool_syscall(SYS_close, proc_fd, 0, 0, 0, 0, 0);
 		}
-		return 0;
+		if (fd < 0) return -1;
+		*saved_fd = fd;
+	} else {
+		if (*saved_fd < 0) return 0;
+		int return_value = ctrtool_syscall_errno(SYS_setns, errno_ptr, *saved_fd, nstype, 0, 0, 0, 0);
+		ctrtool_syscall(SYS_close, *saved_fd, 0, 0, 0, 0, 0);
+		*saved_fd = -1;
+		return -!!return_value;
 	}
-	int fd = ctrtool_syscall_errno(SYS_openat, errno_ptr, proc_fd, name, O_RDONLY|O_CLOEXEC|O_NONBLOCK|O_NOCTTY, 0, 0, 0);
-	if (close_proc_fd) {
-		ctrtool_syscall(SYS_close, proc_fd, 0, 0, 0, 0, 0);
-	}
-	if (fd < 0) return -1;
-	int return_value = ctrtool_syscall_errno(SYS_setns, errno_ptr, fd, nstype, 0, 0, 0, 0);
-	ctrtool_syscall(SYS_close, fd, 0, 0, 0, 0, 0);
-	return -!!return_value;
+	return 0;
 }
 int cl_nsenter_params(const char *param, int *errno_ptr, int is_pre) {
 	int flags = 0;
@@ -29,6 +37,7 @@ int cl_nsenter_params(const char *param, int *errno_ptr, int is_pre) {
 	int fd = -1;
 	int fd_type = 0;
 	int close_fd = 0;
+	int saved_fds[] = {-1, -1, -1, -1, -1, -1, -1};
 	while (1) {
 		switch (*p) {
 			case 'C':
@@ -103,17 +112,33 @@ end_while:
 		case 1:
 			;
 			int return_value = -!!ctrtool_syscall_errno(SYS_setns, errno_ptr, fd, flags, 0, 0, 0, 0);
-			close(fd);
+			ctrtool_syscall(SYS_close, fd, 0, 0, 0, 0, 0);
 			return return_value;
 		case 2:
-			if (cl_enter_proc(fd, "ns/user", CLONE_NEWUSER, flags, 0, errno_ptr)) return -1;
-			if (cl_enter_proc(fd, "ns/cgroup", CLONE_NEWCGROUP, flags, 0, errno_ptr)) return -1;
-			if (cl_enter_proc(fd, "ns/ipc", CLONE_NEWIPC, flags, 0, errno_ptr)) return -1;
-			if (cl_enter_proc(fd, "ns/net", CLONE_NEWNET, flags, 0, errno_ptr)) return -1;
-			if (cl_enter_proc(fd, "ns/uts", CLONE_NEWUTS, flags, 0, errno_ptr)) return -1;
-			if (cl_enter_proc(fd, "ns/pid", CLONE_NEWPID, flags, 0, errno_ptr)) return -1;
-			if (cl_enter_proc(fd, "ns/mnt", CLONE_NEWNS, flags, 1, errno_ptr)) return -1;
+			if (cl_enter_proc(fd, "ns/user", CLONE_NEWUSER, flags, 0, errno_ptr, 1, &saved_fds[0])) goto fail;
+			if (cl_enter_proc(fd, "ns/cgroup", CLONE_NEWCGROUP, flags, 0, errno_ptr, 1, &saved_fds[1])) goto fail;
+			if (cl_enter_proc(fd, "ns/ipc", CLONE_NEWIPC, flags, 0, errno_ptr, 1, &saved_fds[2])) goto fail;
+			if (cl_enter_proc(fd, "ns/net", CLONE_NEWNET, flags, 0, errno_ptr, 1, &saved_fds[3])) goto fail;
+			if (cl_enter_proc(fd, "ns/uts", CLONE_NEWUTS, flags, 0, errno_ptr, 1, &saved_fds[4])) goto fail;
+			if (cl_enter_proc(fd, "ns/pid", CLONE_NEWPID, flags, 0, errno_ptr, 1, &saved_fds[5])) goto fail;
+			if (cl_enter_proc(fd, "ns/mnt", CLONE_NEWNS, flags, 1, errno_ptr, 1, &saved_fds[6])) goto fail;
+
+			if (cl_enter_proc(fd, "ns/user", CLONE_NEWUSER, flags, 0, errno_ptr, 2, &saved_fds[0])) goto fail;
+			if (cl_enter_proc(fd, "ns/cgroup", CLONE_NEWCGROUP, flags, 0, errno_ptr, 2, &saved_fds[1])) goto fail;
+			if (cl_enter_proc(fd, "ns/ipc", CLONE_NEWIPC, flags, 0, errno_ptr, 2, &saved_fds[2])) goto fail;
+			if (cl_enter_proc(fd, "ns/net", CLONE_NEWNET, flags, 0, errno_ptr, 2, &saved_fds[3])) goto fail;
+			if (cl_enter_proc(fd, "ns/uts", CLONE_NEWUTS, flags, 0, errno_ptr, 2, &saved_fds[4])) goto fail;
+			if (cl_enter_proc(fd, "ns/pid", CLONE_NEWPID, flags, 0, errno_ptr, 2, &saved_fds[5])) goto fail;
+			if (cl_enter_proc(fd, "ns/mnt", CLONE_NEWNS, flags, 1, errno_ptr, 2, &saved_fds[6])) goto fail;
 			return 0;
 	}
+fail:
+	ctrtool_syscall(SYS_close, saved_fds[0], 0, 0, 0, 0, 0);
+	ctrtool_syscall(SYS_close, saved_fds[1], 0, 0, 0, 0, 0);
+	ctrtool_syscall(SYS_close, saved_fds[2], 0, 0, 0, 0, 0);
+	ctrtool_syscall(SYS_close, saved_fds[3], 0, 0, 0, 0, 0);
+	ctrtool_syscall(SYS_close, saved_fds[4], 0, 0, 0, 0, 0);
+	ctrtool_syscall(SYS_close, saved_fds[5], 0, 0, 0, 0, 0);
+	ctrtool_syscall(SYS_close, saved_fds[6], 0, 0, 0, 0, 0);
 	return -1;
 }
