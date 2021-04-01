@@ -568,3 +568,13 @@ int ctrtool_make_fd_nonblocking(int fd, int nonblock) {
 	}
 	return !!(orig_fcntl & O_NONBLOCK);
 }
+int ctrtool_make_fd_cloexec(int fd, int cloexec) {
+	int orig_fcntl = fcntl(fd, F_GETFD, 0);
+	if (orig_fcntl < 0) return -1;
+	if (cloexec) {
+		if (fcntl(fd, F_SETFD, orig_fcntl | FD_CLOEXEC)) return -1;
+	} else {
+		if (fcntl(fd, F_SETFD, orig_fcntl & ~FD_CLOEXEC)) return -1;
+	}
+	return !!(orig_fcntl & FD_CLOEXEC);
+}

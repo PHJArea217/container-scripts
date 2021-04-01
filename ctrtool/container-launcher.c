@@ -26,6 +26,7 @@
 #include <getopt.h>
 #include <syscall.h>
 #include "ctrtool-common.h"
+#include "ctrtool_tty_proxy.h"
 struct child_data {
 	uint64_t inh_caps;
 	uint64_t ambient_caps;
@@ -37,7 +38,7 @@ struct child_data {
 	struct iovec supp_groups;
 	unsigned no_setgroups:1;
 	unsigned no_uidgid:1;
-	unsigned do_setsid:1;
+	unsigned unsafe_no_setsid:1;
 	unsigned inh_all:1;
 	unsigned inh_ambient:1;
 	unsigned set_bounding:1;
@@ -100,7 +101,7 @@ static int make_safe_fd(int new_fd, const char *perror_str, int do_cloexec) {
 	return f;
 }
 #endif
-static const char *child_func(struct child_data *data, int *errno_ptr) {
+static const char *child_func(struct child_data *data, int *errno_ptr, struct ctrtool_tty_proxy *tty_proxy_options) {
 	errno = 0;
 	if (data->no_new_privs) {
 		if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0)) return "prctl";
@@ -119,7 +120,7 @@ static const char *child_func(struct child_data *data, int *errno_ptr) {
 		data->close_fds.start = NULL;
 	}
 	/* step 1: setsid() */
-	if (data->do_setsid) {
+	if (!data->unsafe_no_setsid) {
 		if (setsid() < 0) return "setsid";
 	}
 	/* step 1.25: clear env variables */
@@ -147,6 +148,14 @@ static const char *child_func(struct child_data *data, int *errno_ptr) {
 	if (data->mount_propagation) {
 		if (mount(NULL, "/", NULL, MS_REC|data->mount_propagation, NULL)) return "mount /proc";
 	}
+	/* step 1.6: open up the tty */
+	if (tty_proxy_options) {
+		if (tty_proxy_options->is_init) {
+			if (ctrtool_tty_proxy_child(tty_proxy_options)) {
+				return "ctrtool_tty_proxy_child";
+			}
+		}
+	}
 	int devnull_fd = -1;
 	if (data->log_fd >= 0) {
 		int devnull_fd = ctrtool_syscall_errno(SYS_openat, errno_ptr, AT_FDCWD, "/dev/null", O_RDONLY, 0, 0, 0);
@@ -154,8 +163,8 @@ static const char *child_func(struct child_data *data, int *errno_ptr) {
 	}
 	if (data->notify_parent_fd >= 0) {
 		/* step 2: notify parent */
-		if (write(data->notify_parent_fd, "\0", 1) != 1) return "notify fd";
-		close(data->notify_parent_fd);
+		if (ctrtool_syscall_errno(SYS_write, errno_ptr, data->notify_parent_fd, "\0", 1, 0, 0, 0) != 1) return "!notify fd";
+		CTRTOOL_CLOSE_NO_ERROR(data->notify_parent_fd);
 		/* step 3: wait for script */
 		char buf = 0;
 		if (ctrtool_syscall_errno(SYS_read, errno_ptr, data->wait_fd, &buf, 1, 0, 0, 0) != 1) return "!notify fd";
@@ -381,7 +390,13 @@ int ctr_scripts_container_launcher_main(int argc, char **argv) {
 	int unsafe_no_escape = 0;
 	int clear_caps_before_exec = 2;
 	int clear_caps_before_exec_default = 0;
+	struct ctrtool_tty_proxy tty_proxy_object = {0};
+	int alloc_tty = 0;
+	uid_t ptmx_uid = -1;
+	gid_t ptmx_gid = -1;
 	static struct option long_options[] = {
+		{"alloc-tty", no_argument, NULL, 70021},
+		{"alloc-pipe", no_argument, NULL, 70022},
 		{"ambient-caps", required_argument, NULL, 'a'},
 		{"bounding-caps", required_argument, NULL, 'b'},
 		{"cgroup", no_argument, NULL, 'C'},
@@ -432,11 +447,14 @@ int ctr_scripts_container_launcher_main(int argc, char **argv) {
 		{"socketpair", required_argument, NULL, 'X'},
 		{"thp-disable", required_argument, NULL, 'v'},
 		{"timerslack", required_argument, NULL, 'Q'},
+		{"tty-owner-uid", required_argument, NULL, 70023},
+		{"tty-owner-gid", required_argument, NULL, 70024},
 		{"uid", required_argument, NULL, 'S'},
 		{"uid-map", required_argument, NULL, 70004},
 		{"unsafe", no_argument, NULL, 'E'},
 		{"unsafe-debug-dumpable", no_argument, NULL, 70018},
 		{"unsafe-no-escape", no_argument, NULL, 70017},
+		{"unsafe-no-setsid", no_argument, NULL, 70020},
 		{"user", no_argument, NULL, 'U'},
 		{"userns-fd", required_argument, NULL, 'f'},
 		{"uts", no_argument, NULL, 'u'},
@@ -482,7 +500,7 @@ int ctr_scripts_container_launcher_main(int argc, char **argv) {
 				data_to_process.no_uidgid = 1;
 				break;
 			case 's':
-				data_to_process.do_setsid = 1;
+				/* data_to_process.do_setsid = 1; */
 				break;
 			case 'w':
 				do_wait = 1;
@@ -773,6 +791,27 @@ invalid_propagation:
 					clear_caps_before_exec = 1;
 				}
 				break;
+			case 70020:
+				data_to_process.unsafe_no_setsid = 1;
+				break;
+			case 70021:
+				alloc_tty = 1;
+				do_wait = 1;
+				tty_proxy_object.use_stderr_pipe = 1;
+				tty_proxy_object.use_stdio_pipe = 0;
+				break;
+			case 70022:
+				alloc_tty = 1;
+				do_wait = 1;
+				tty_proxy_object.use_stderr_pipe = 1;
+				tty_proxy_object.use_stdio_pipe = 1;
+				break;
+			case 70023:
+				ptmx_uid = strtoull(optarg, NULL, 0);
+				break;
+			case 70024:
+				ptmx_gid = strtoull(optarg, NULL, 0);
+				break;
 			case 70100:
 				free(data_to_process.supp_groups.iov_base);
 				data_to_process.supp_groups.iov_base = NULL;
@@ -964,7 +1003,7 @@ invalid_propagation:
 		data_to_process.notify_parent_fd = -1;
 		data_to_process.wait_fd = -1;
 		data_to_process.log_fd = -1;
-		const char *r = child_func(&data_to_process, &errno_ptr);
+		const char *r = child_func(&data_to_process, &errno_ptr, NULL);
 		if (r) {
 			if (r[0] == '!') {
 				ctrtool_cheap_perror(&r[1], errno_ptr);
@@ -1016,7 +1055,18 @@ invalid_propagation:
 		}
 	}
 	free(logfile); logfile = NULL;
-	
+	if (alloc_tty) {
+		if (ctrtool_open_tty_proxy(&tty_proxy_object)) {
+			perror("ctrtool_open_tty_proxy");
+			return 1;
+		}
+		if (owner_uid != -1) {
+			if (ctrtool_tty_proxy_chown_slave(&tty_proxy_object, owner_uid, -1)) {
+				perror("ctrtool_tty_proxy_chown_slave");
+				return 1;
+			}
+		}
+	}
 	int pipe_to_child[2] = {-1, -1};
 	int pipe_from_child[2] = {-1, -1};
 	if (pipe2(pipe_to_child, O_CLOEXEC)) return 1;
@@ -1109,7 +1159,7 @@ invalid_propagation:
 		data_to_process.notify_parent_fd = pipe_from_child[1];
 		data_to_process.wait_fd = pipe_to_child[0];
 		data_to_process.log_fd = log_fd;
-		const char *r = child_func(&data_to_process, &errno_ptr);
+		const char *r = child_func(&data_to_process, &errno_ptr, &tty_proxy_object);
 		if (r) {
 			if (r[0] == '!') {
 				ctrtool_cheap_perror(&r[1], errno_ptr);
@@ -1288,6 +1338,13 @@ no_emptyfile:;
 		}
 		close(gid_map_fd);
 	}
+	if (alloc_tty) {
+		if (ctrtool_tty_proxy_chown_slave(&tty_proxy_object, ptmx_uid, ptmx_gid)) {
+			perror("ctrtool_tty_proxy_chown_slave");
+			return 1;
+		}
+		ctrtool_tty_proxy_master(&tty_proxy_object, 1);
+	}
 	if (do_exec_script) {
 		if (!script_file) {
 			return 0;
@@ -1365,15 +1422,22 @@ no_emptyfile:;
 	}
 	close(pipe_to_child[1]);
 	close(socketpair_to_child[0]);
-	if (do_wait) {
-		int wait_status = 0;
-		while (1) {
-			pid_t wait_for_pid = waitpid(clone_result, &wait_status, 0);
-			if (wait_for_pid == clone_result) {
-				break;
+	if (do_wait || alloc_tty) {
+		int wait_status = 0xff00;
+		if (alloc_tty) {
+			if (ctrtool_tty_proxy_mainloop(&tty_proxy_object, clone_result, &wait_status)) {
+				perror("ctrtool_tty_proxy_mainloop");
+				return 255;
 			}
-			if ((wait_for_pid < 0) && (errno == EINTR)) continue;
-			return 1;
+		} else {
+			while (1) {
+				pid_t wait_for_pid = waitpid(clone_result, &wait_status, 0);
+				if (wait_for_pid == clone_result) {
+					break;
+				}
+				if ((wait_for_pid < 0) && (errno == EINTR)) continue;
+				return 1;
+			}
 		}
 		if (WIFEXITED(wait_status)) {
 			return WEXITSTATUS(wait_status);

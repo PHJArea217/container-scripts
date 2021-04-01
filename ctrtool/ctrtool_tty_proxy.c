@@ -3,6 +3,7 @@
 #include "ctrtool_relay.h"
 #include "ctrtool_tty_proxy.h"
 #include <termios.h>
+#include <assert.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <fcntl.h>
@@ -65,6 +66,7 @@ int ctrtool_open_tty_proxy(struct ctrtool_tty_proxy *options) {
 		options->stdout_pipe_fd[1] = -1;
 		options->slave_fd = -1;
 	}
+	options->is_init = 1;
 	return 0;
 close_stdout_pipe:
 	CTRTOOL_CLOSE_NO_ERROR(options->stdout_pipe_fd[0]);
@@ -75,7 +77,37 @@ close_stderr_pipe:
 	return -1;
 }
 /* TODO: cleanup */
+#define CHOWN_IF_VALID_FD(fd, uid, gid) do {if (fd >= 0) {if (fd < 3) {errno = EINVAL; return -1;} else {if (fchown(fd, uid, gid)) return -1;}}} while (0)
+int ctrtool_tty_proxy_chown_slave(struct ctrtool_tty_proxy *options, uid_t uid, gid_t gid) {
+	assert(options->is_init);
+	CHOWN_IF_VALID_FD(options->stdin_pipe_fd[0], uid, gid);
+	CHOWN_IF_VALID_FD(options->stdout_pipe_fd[1], uid, gid);
+	CHOWN_IF_VALID_FD(options->stderr_pipe_fd[1], uid, gid);
+	if (options->master_fd >= 3) {
+		if (options->ptmx_file) {
+			int new_slave_fd = ioctl(options->master_fd, TIOCGPTPEER, O_RDWR|O_CLOEXEC|O_NOCTTY);
+			if (new_slave_fd < 0) {
+				return -1;
+			}
+			if (fchown(new_slave_fd, uid, gid)) {
+				CTRTOOL_CLOSE_NO_ERROR(new_slave_fd);
+				return -1;
+			}
+			CTRTOOL_CLOSE_NO_ERROR(new_slave_fd);
+		} else {
+			char pts_name_buf[48] = {0};
+			if (ptsname_r(options->master_fd, pts_name_buf, 48)) {
+				return -1;
+			}
+			if (chown(pts_name_buf, uid, gid)) {
+				return -1;
+			}
+		}
+	}
+	return 0;
+}
 int ctrtool_tty_proxy_child(struct ctrtool_tty_proxy *options) {
+	assert(options->is_init);
 	if (options->use_stdio_pipe) {
 		CTRTOOL_CLOSE_NO_ERROR(options->stdout_pipe_fd[0]);
 		CTRTOOL_CLOSE_NO_ERROR(options->stdin_pipe_fd[1]);
@@ -117,22 +149,33 @@ int ctrtool_tty_proxy_child(struct ctrtool_tty_proxy *options) {
 	CTRTOOL_CLOSE_NO_ERROR(options->stdout_pipe_fd[1]);
 	return 0;
 }
-void ctrtool_tty_proxy_master(struct ctrtool_tty_proxy *options) {
+void ctrtool_tty_proxy_master(struct ctrtool_tty_proxy *options, int make_cloexec) {
+	assert(options->is_init);
 	if (options->use_stdio_pipe) {
 		CTRTOOL_CLOSE_NO_ERROR(options->stdout_pipe_fd[1]);
 		CTRTOOL_CLOSE_NO_ERROR(options->stdin_pipe_fd[0]);
 		options->ultimate_stdin_dest = options->stdin_pipe_fd[1];
 		options->ultimate_stdout_src = options->stdout_pipe_fd[0];
 		options->ultimate_stderr_src = -1;
+		if (make_cloexec) {
+			assert(ctrtool_make_fd_cloexec(options->stdin_pipe_fd[1], 1) == 0);
+			assert(ctrtool_make_fd_cloexec(options->stdout_pipe_fd[0], 1) == 0);
+		}
 	} else {
 		CTRTOOL_CLOSE_NO_ERROR(options->slave_fd);
 		options->ultimate_stdin_dest = options->master_fd;
 		options->ultimate_stdout_src = options->master_fd;
 		options->ultimate_stderr_src = -1;
+		if (make_cloexec) {
+			assert(ctrtool_make_fd_cloexec(options->master_fd, 1) == 0);
+		}
 	}
 	if (options->use_stderr_pipe) {
 		CTRTOOL_CLOSE_NO_ERROR(options->stderr_pipe_fd[1]);
 		options->ultimate_stderr_src = options->stderr_pipe_fd[0];
+		if (make_cloexec) {
+			assert(ctrtool_make_fd_cloexec(options->stderr_pipe_fd[0], 1) == 0);
+		}
 	}
 }
 static volatile sig_atomic_t sigchld_received = 0;
@@ -154,6 +197,7 @@ static int block_sigchld(sigset_t *poll_sigset) {
 	return 0;
 }
 int ctrtool_tty_proxy_mainloop(struct ctrtool_tty_proxy *options, pid_t child_pid, int *child_wait_status) {
+	assert(options->is_init);
 	struct termios orig_ios = {0};
 	int restore_term = 0;
 	int restore_sigmask = 0;
@@ -245,11 +289,18 @@ int ctrtool_tty_proxy_mainloop(struct ctrtool_tty_proxy *options, pid_t child_pi
 			if (child_wait) {
 				break;
 			}
+			if (ctrtool_syscall_errno(SYS_rt_sigsuspend, &errno, &poll_sigmask, sizeof(uint64_t), 0, 0, 0, 0)) {
+				if (errno == EINTR) {
+					goto after_poll;
+				}
+			}
+			goto close_stderr;
 		}
-		int poll_result = ppoll(pfds, stderr_relay ? 6 : 4, NULL, &poll_sigmask);
+		int poll_result = ctrtool_syscall_errno(SYS_ppoll, &errno, pfds, stderr_relay ? 6 : 4, NULL, &poll_sigmask, sizeof(uint64_t), 0);
 		if ((poll_result < 0) && (errno != EINTR)) {
 			goto close_stderr;
 		}
+after_poll:
 		if ((!child_wait) && sigchld_received) {
 			pid_t w_pid = waitpid(child_pid, child_wait_status, WNOHANG);
 			if ((w_pid < 0) && (errno == ECHILD)) {
@@ -305,7 +356,7 @@ last:
 		tcsetattr(0, TCSANOW, &orig_ios);
 	}
 	if (restore_sigmask) {
-		ctrtool_syscall(SYS_rt_sigprocmask, SIG_SETMASK, &poll_sigmask, 0, sizeof(sigset_t), 0, 0);
+		ctrtool_syscall(SYS_rt_sigprocmask, SIG_SETMASK, &poll_sigmask, 0, sizeof(uint64_t), 0, 0);
 	}
 	return ret;
 }

@@ -70,7 +70,7 @@ int ctr_scripts_tty_proxy_main(int argc, char **argv) {
 		_exit(127);
 	} else {
 		close(s_pipe[1]);
-		ctrtool_tty_proxy_master(&proxy_object);
+		ctrtool_tty_proxy_master(&proxy_object, 1);
 		char buf = 0;
 		if (read(s_pipe[0], &buf, 1) != 1) {
 			perror("read");

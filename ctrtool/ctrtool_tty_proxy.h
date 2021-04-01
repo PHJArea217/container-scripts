@@ -14,8 +14,10 @@ struct ctrtool_tty_proxy {
 	unsigned use_stderr_pipe:1;
 	unsigned use_stdio_pipe:1;
 	unsigned host_is_tty:1;
+	unsigned is_init:1;
 };
 int ctrtool_open_tty_proxy(struct ctrtool_tty_proxy *options);
 int ctrtool_tty_proxy_child(struct ctrtool_tty_proxy *options);
-void ctrtool_tty_proxy_master(struct ctrtool_tty_proxy *options);
+void ctrtool_tty_proxy_master(struct ctrtool_tty_proxy *options, int make_cloexec);
 int ctrtool_tty_proxy_mainloop(struct ctrtool_tty_proxy *options, pid_t child_pid, int *child_wait_status);
+int ctrtool_tty_proxy_chown_slave(struct ctrtool_tty_proxy *options, uid_t uid, gid_t gid);
