@@ -256,7 +256,7 @@ int ctrtool_tty_proxy_mainloop(struct ctrtool_tty_proxy *options, pid_t child_pi
 	}
 	while (1) {
 		struct pollfd pfds[6] = {0};
-		if (fd_wait == 0) {
+		if (fd_wait != 3) {
 			if (ctrtool_relay_can_poll_in(stdin_relay)) {
 				pfds[0].fd = STDIN_FILENO;
 				pfds[0].events = POLLIN;
@@ -328,6 +328,9 @@ after_poll:
 				child_wait = 1;
 			}
 		}
+		if (child_wait && (fd_wait & 1)) {
+			break;
+		}
 		if (pfds[0].revents) {
 			ctrtool_relay_consume(stdin_relay);
 			ctrtool_relay_release(stdin_relay);
@@ -349,8 +352,11 @@ after_poll:
 		if (pfds[5].revents) {
 			ctrtool_relay_release(stderr_relay);
 		}
+		if (stdin_relay->state == CTRTOOL_RELAY_STATE_TERMINATED) {
+			fd_wait |= 2;
+		}
 		if ((stdout_relay->state == CTRTOOL_RELAY_STATE_TERMINATED) && ((!stderr_relay) || (stderr_relay->state == CTRTOOL_RELAY_STATE_TERMINATED))) {
-			fd_wait = 1;
+			fd_wait |= 1;
 		}
 		continue;
 #if 0

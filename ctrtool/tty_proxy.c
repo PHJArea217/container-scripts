@@ -88,7 +88,7 @@ int ctr_scripts_tty_proxy_main(int argc, char **argv) {
 			return -1;
 		}
 		if (WIFEXITED(wait_status)) return WEXITSTATUS(wait_status);
-		if (WIFSIGNALED(wait_status)) return WTERMSIG(wait_status);
+		if (WIFSIGNALED(wait_status)) return WTERMSIG(wait_status) + 128;
 	}
 	return -1;
 }
