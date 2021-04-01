@@ -75,6 +75,7 @@ struct pid_file {
 };
 #define NSENTER_REQUESTS_MAX 64
 static char *nsenter_requests[NSENTER_REQUESTS_MAX] = {0};
+static char *nsenter2_requests[NSENTER_REQUESTS_MAX] = {0};
 static char *nsenter_post_requests[NSENTER_REQUESTS_MAX] = {0};
 static void convert_uint64(const char *str, uint64_t *result) {
 	if (!isdigit(str[0])) {
@@ -154,6 +155,20 @@ static const char *child_func(struct child_data *data, int *errno_ptr, struct ct
 			if (ctrtool_tty_proxy_child(tty_proxy_options)) {
 				return "ctrtool_tty_proxy_child";
 			}
+		}
+	}
+	/* step 1.7: process nsenter2 requests */
+	for (int i = 0; i < NSENTER_REQUESTS_MAX; i++) {
+		if (!nsenter2_requests[i]) break;
+		switch (cl_nsenter_params(nsenter2_requests[i], errno_ptr, 0)) {
+			case 0:
+				break;
+			case -2:
+				return "!cannot read nsenter argument";
+				break;
+			default:
+				return "!nsenter failed";
+				break;
 		}
 	}
 	int devnull_fd = -1;
@@ -382,6 +397,7 @@ int ctr_scripts_container_launcher_main(int argc, char **argv) {
 	int do_pidfd = 0;
 	int errno_ptr = 0;
 	size_t current_nsenter_point = 0;
+	size_t current_nsenter2_point = 0;
 	size_t current_nsenter_post_point = 0;
 	struct iovec clone3_set_tid = {0};
 	struct ctrtool_arraylist rlimit_list = {0};
@@ -427,6 +443,7 @@ int ctr_scripts_container_launcher_main(int argc, char **argv) {
 		{"mount-proc", no_argument, NULL, 't'},
 		{"net", no_argument, NULL, 'n'},
 		{"nsenter", required_argument, NULL, 70009},
+		{"nsenter2", required_argument, NULL, 70025},
 		{"nsenter-post", required_argument, NULL, 70010},
 		{"no-clear-groups", no_argument, NULL, 'g'},
 		{"no-new-privs", no_argument, NULL, 'D'},
@@ -812,6 +829,16 @@ invalid_propagation:
 			case 70024:
 				ptmx_gid = strtoull(optarg, NULL, 0);
 				break;
+			case 70025:
+				clear_caps_before_exec_default = 1;
+				if (current_nsenter2_point >= NSENTER_REQUESTS_MAX) {
+					fprintf(stderr, "Maximum of %d nsenter2 requests are allowed\n", NSENTER_REQUESTS_MAX);
+					return 1;
+				}
+				char *nsenter2_request = ctrtool_strdup(optarg);
+				if (!nsenter2_request) return 1;
+				nsenter2_requests[current_nsenter2_point++] = nsenter2_request;
+				break;
 			case 70100:
 				free(data_to_process.supp_groups.iov_base);
 				data_to_process.supp_groups.iov_base = NULL;
@@ -1061,6 +1088,7 @@ invalid_propagation:
 			return 1;
 		}
 		if (owner_uid != -1) {
+			/* Need to change pts to owner uid here, as the new process will be initially running with that uid */
 			if (ctrtool_tty_proxy_chown_slave(&tty_proxy_object, owner_uid, -1)) {
 				perror("ctrtool_tty_proxy_chown_slave");
 				return 1;
