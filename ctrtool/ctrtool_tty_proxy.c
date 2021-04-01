@@ -115,24 +115,40 @@ int ctrtool_tty_proxy_child(struct ctrtool_tty_proxy *options) {
 		if (dup2(options->stdout_pipe_fd[1], 1) < 0) return -1;
 		CTRTOOL_CLOSE_NO_ERROR(options->stdin_pipe_fd[0]);
 	} else {
+		int new_slave_fd_stdin = -1;
+		int new_slave_fd_stdout = -1;
 		if (options->ptmx_file) { /* Have a /dev/ptmx file -> use the ioctl */
-			int new_slave_fd = ioctl(options->master_fd, TIOCGPTPEER, O_RDWR);
-			if (new_slave_fd < 0) {
+			new_slave_fd_stdin = ioctl(options->master_fd, TIOCGPTPEER, O_RDONLY);
+			if (new_slave_fd_stdin < 0) {
 				return -1;
 			}
-			options->slave_fd = new_slave_fd;
+			if (dup2(new_slave_fd_stdin, 0) < 0) return -1;
+			CTRTOOL_CLOSE_NO_ERROR(new_slave_fd_stdin);
+
+			new_slave_fd_stdout = ioctl(options->master_fd, TIOCGPTPEER, O_WRONLY);
+			if (new_slave_fd_stdout < 0) {
+				return -1;
+			}
+			if (dup2(new_slave_fd_stdout, 1) < 0) return -1;
 		} else {
 			char pts_name_buf[48] = {0};
 			if (ptsname_r(options->master_fd, pts_name_buf, 48)) {
 				return -1;
 			}
-			if ((options->slave_fd = open(pts_name_buf, O_RDWR)) < 0) {
+			if ((new_slave_fd_stdin = open(pts_name_buf, O_RDONLY)) < 0) {
 				return -1;
 			}
+			if (dup2(new_slave_fd_stdin, 0) < 0) return -1;
+			CTRTOOL_CLOSE_NO_ERROR(new_slave_fd_stdin);
+
+			new_slave_fd_stdout = open(pts_name_buf, O_WRONLY);
+			if (new_slave_fd_stdout < 0) {
+				return -1;
+			}
+			if (dup2(new_slave_fd_stdout, 1) < 0) return -1;
 		}
+		options->slave_fd = new_slave_fd_stdout;
 		CTRTOOL_CLOSE_NO_ERROR(options->master_fd);
-		if (dup2(options->slave_fd, 0) < 0) return -1;
-		if (dup2(options->slave_fd, 1) < 0) return -1;
 	}
 	if (options->use_stderr_pipe) {
 		CTRTOOL_CLOSE_NO_ERROR(options->stderr_pipe_fd[0]);
