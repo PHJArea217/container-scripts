@@ -62,6 +62,7 @@ struct child_data {
 	int log_fd;
 	int socketpair_fd;
 	int mount_propagation;
+	int host_notify_fd;
 
 	int exec_fd;
 	char *exec_file;
@@ -355,6 +356,10 @@ static const char *child_func(struct child_data *data, int *errno_ptr, struct ct
 		if (ctrtool_syscall_errno(SYS_dup3, errno_ptr, data->log_fd, 2, 0, 0, 0, 0) != 2) return "!dup3";
 		ctrtool_syscall_errno(SYS_close, errno_ptr, data->log_fd, 0, 0, 0, 0, 0);
 	}
+	if (data->host_notify_fd >= 3) {
+		if (ctrtool_syscall_errno(SYS_write, errno_ptr, data->host_notify_fd, ":", 1, 0, 0, 0) != 1) return "!write notify_fd";
+	}
+	CTRTOOL_CLOSE_NO_ERROR(data->host_notify_fd);
 	/* step 13: fork mode */
 	if (data->fork_mode) {
 		pid_t child_pid = ctrtool_clone_onearg(SIGCHLD);
@@ -388,6 +393,7 @@ int ctr_scripts_container_launcher_main(int argc, char **argv) {
 	struct child_data data_to_process = {0};
 	data_to_process.log_fd = -1;
 	data_to_process.exec_fd = -1;
+	data_to_process.host_notify_fd = -1;
 	data_to_process.mount_propagation = 0;
 	data_to_process.close_fds.elem_size = sizeof(int);
 	int mount_propagation = MS_BIND; /* a nonsensical value */
@@ -464,6 +470,7 @@ int ctr_scripts_container_launcher_main(int argc, char **argv) {
 		{"no-clear-groups", no_argument, NULL, 'g'},
 		{"no-new-privs", no_argument, NULL, 'D'},
 		{"no-set-id", no_argument, NULL, 'N'},
+		{"notify-fd", required_argument, NULL, 70027},
 		{"old-nsenter", required_argument, NULL, 70009},
 		{"owner-uid", required_argument, NULL, 'O'},
 		{"open-namespaces", required_argument, NULL, 70026},
@@ -885,6 +892,19 @@ invalid_propagation:
 							break;
 					}
 					ns_option_p++;
+				}
+				break;
+			case 70027:
+				;int new_notify_fd = atoi(optarg);
+				if (new_notify_fd >= 3) {
+					if (fcntl(new_notify_fd, F_GETFD, 0) < 0) {
+						perror("fcntl --notify-fd");
+						return 1;
+					}
+					data_to_process.host_notify_fd = new_notify_fd;
+				} else {
+					fprintf(stderr, "--notify-fd must be >= 3\n");
+					return 1;
 				}
 				break;
 			case 70100:
