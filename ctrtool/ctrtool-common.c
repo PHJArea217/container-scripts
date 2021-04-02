@@ -578,3 +578,14 @@ int ctrtool_make_fd_cloexec(int fd, int cloexec) {
 	}
 	return !!(orig_fcntl & FD_CLOEXEC);
 }
+int ctrtool_export_fd(int fd, const char *env_name) {
+	char tmp_buf[40] = {0};
+	if (ctrtool_make_fd_cloexec(fd, 0) < 0) {
+		return -1;
+	}
+	if (snprintf(tmp_buf, sizeof(tmp_buf), "%d", fd) <= 0) return -1;
+	if (setenv(env_name, tmp_buf, 1)) {
+		return -1;
+	}
+	return 0;
+}

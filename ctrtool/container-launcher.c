@@ -102,6 +102,22 @@ static int make_safe_fd(int new_fd, const char *perror_str, int do_cloexec) {
 	return f;
 }
 #endif
+static int open_namespaces_and_setenv(int proc_fd, int which_namespaces) {
+	char tmp_buf[40] = {0};
+#define OPEN_NAMESPACES_OP(flag, str, envname) if (which_namespaces & flag) { \
+				int ns_fd = openat(proc_fd, str, O_RDONLY|O_NONBLOCK|O_NOCTTY); \
+				if (ns_fd < 0) return -1; \
+				if (snprintf(tmp_buf, sizeof(tmp_buf), "%d", ns_fd) <= 0) {close(ns_fd); return -1;} \
+				if (setenv(envname, tmp_buf, 1)) {close(ns_fd); return -1;} \
+			}
+	OPEN_NAMESPACES_OP(CLONE_NEWIPC, "ns/ipc", "CTRTOOL_CONTAINER_LAUNCHER_IPC_NS");
+	OPEN_NAMESPACES_OP(CLONE_NEWNS, "ns/mnt", "CTRTOOL_CONTAINER_LAUNCHER_MNT_NS");
+	OPEN_NAMESPACES_OP(CLONE_NEWNET, "ns/net", "CTRTOOL_CONTAINER_LAUNCHER_NET_NS");
+	OPEN_NAMESPACES_OP(CLONE_NEWPID, "ns/pid", "CTRTOOL_CONTAINER_LAUNCHER_PID_NS");
+	OPEN_NAMESPACES_OP(CLONE_NEWUSER, "ns/user", "CTRTOOL_CONTAINER_LAUNCHER_USER_NS");
+	OPEN_NAMESPACES_OP(CLONE_NEWUTS, "ns/uts", "CTRTOOL_CONTAINER_LAUNCHER_UTS_NS");
+	return 0;
+}
 static const char *child_func(struct child_data *data, int *errno_ptr, struct ctrtool_tty_proxy *tty_proxy_options) {
 	errno = 0;
 	if (data->no_new_privs) {
@@ -157,6 +173,11 @@ static const char *child_func(struct child_data *data, int *errno_ptr, struct ct
 			}
 		}
 	}
+	int devnull_fd = -1;
+	if (data->log_fd >= 0) {
+		int devnull_fd = ctrtool_syscall_errno(SYS_openat, errno_ptr, AT_FDCWD, "/dev/null", O_RDONLY, 0, 0, 0);
+		if (devnull_fd < 0) return "!open /dev/null";
+	}
 	/* step 1.7: process nsenter2 requests */
 	for (int i = 0; i < NSENTER_REQUESTS_MAX; i++) {
 		if (!nsenter2_requests[i]) break;
@@ -170,11 +191,6 @@ static const char *child_func(struct child_data *data, int *errno_ptr, struct ct
 				return "!nsenter failed";
 				break;
 		}
-	}
-	int devnull_fd = -1;
-	if (data->log_fd >= 0) {
-		int devnull_fd = ctrtool_syscall_errno(SYS_openat, errno_ptr, AT_FDCWD, "/dev/null", O_RDONLY, 0, 0, 0);
-		if (devnull_fd < 0) return "!open /dev/null";
 	}
 	if (data->notify_parent_fd >= 0) {
 		/* step 2: notify parent */
@@ -410,6 +426,7 @@ int ctr_scripts_container_launcher_main(int argc, char **argv) {
 	int alloc_tty = 0;
 	uid_t ptmx_uid = -1;
 	gid_t ptmx_gid = -1;
+	int open_namespaces = 0;
 	static struct option long_options[] = {
 		{"alloc-tty", no_argument, NULL, 70021},
 		{"alloc-pipe", no_argument, NULL, 70022},
@@ -442,13 +459,14 @@ int ctr_scripts_container_launcher_main(int argc, char **argv) {
 		{"mount", no_argument, NULL, 'm'},
 		{"mount-proc", no_argument, NULL, 't'},
 		{"net", no_argument, NULL, 'n'},
-		{"nsenter", required_argument, NULL, 70009},
 		{"nsenter2", required_argument, NULL, 70025},
 		{"nsenter-post", required_argument, NULL, 70010},
 		{"no-clear-groups", no_argument, NULL, 'g'},
 		{"no-new-privs", no_argument, NULL, 'D'},
 		{"no-set-id", no_argument, NULL, 'N'},
+		{"old-nsenter", required_argument, NULL, 70009},
 		{"owner-uid", required_argument, NULL, 'O'},
+		{"open-namespaces", required_argument, NULL, 70026},
 		{"pid", no_argument, NULL, 'p'},
 		{"pidfd", no_argument, NULL, 70007},
 		{"pivot-root", required_argument, NULL, 'r'},
@@ -839,6 +857,36 @@ invalid_propagation:
 				if (!nsenter2_request) return 1;
 				nsenter2_requests[current_nsenter2_point++] = nsenter2_request;
 				break;
+			case 70026:
+				;const char *ns_option_p = optarg;
+				while (*ns_option_p) {
+					switch (*ns_option_p) {
+						case 'i':
+							open_namespaces |= CLONE_NEWIPC;
+							break;
+						case 'm':
+							open_namespaces |= CLONE_NEWNS;
+							break;
+						case 'n':
+							open_namespaces |= CLONE_NEWNET;
+							break;
+						case 'p':
+							open_namespaces |= CLONE_NEWPID;
+							break;
+						case 'U':
+							open_namespaces |= CLONE_NEWUSER;
+							break;
+						case 'u':
+							open_namespaces |= CLONE_NEWUTS;
+							break;
+						default:
+							fprintf(stderr, "Unknown --open-namespaces flag '%c'\n", *ns_option_p);
+							return 1;
+							break;
+					}
+					ns_option_p++;
+				}
+				break;
 			case 70100:
 				free(data_to_process.supp_groups.iov_base);
 				data_to_process.supp_groups.iov_base = NULL;
@@ -948,14 +996,14 @@ invalid_propagation:
 			return 1;
 		}
 		if ((userns_fd == -1) && current_nsenter_point) {
-			fputs("attempting to use --nsenter without -f, use -E to override\n", stderr);
+			fputs("attempting to use --old-nsenter without -f, use -E to override\n", stderr);
 			return 1;
 		}
 	}
 	if (!unsafe_no_escape) {
 		if (!has_escaped) {
-			if (current_nsenter_point || current_nsenter_post_point) {
-				fputs("attempting to use --nsenter or --nsenter-post without --escape\n", stderr);
+			if (current_nsenter_point || current_nsenter_post_point || current_nsenter2_point) {
+				fputs("attempting to use --old-nsenter, --nsenter2, or --nsenter-post without --escape\n", stderr);
 				return 1;
 			}
 			if ((userns_fd >= 0) || (clone_flags & CLONE_NEWUSER)) {
@@ -1147,7 +1195,7 @@ invalid_propagation:
 	}
 	long clone_result;
 	if (clone3_set_tid.iov_len) {
-#ifdef CTRTOOL_CLONE3_HACK
+#ifndef CTRTOOL_CLONE3_KERNEL
 		__aligned_u64 clone_args0[10] = {0};
 		clone_args0[0] = clone_flags;
 		clone_args0[4] = SIGCHLD;
@@ -1371,12 +1419,29 @@ no_emptyfile:;
 			perror("ctrtool_tty_proxy_chown_slave");
 			return 1;
 		}
+		/* FIXME: handle the do_exec_script_case */
 		ctrtool_tty_proxy_master(&tty_proxy_object, 1);
 	}
 	if (do_exec_script) {
 		if (!script_file) {
 			return 0;
 		}
+		if (tty_proxy_object.ultimate_stdin_dest >= 0)
+			if (ctrtool_export_fd(tty_proxy_object.ultimate_stdin_dest, "CTRTOOL_CONTAINER_LAUNCHER_CHILD_STDIN_FD")) {
+				perror("ctrtool_export_fd");
+				return 1;
+			}
+		if (tty_proxy_object.ultimate_stdout_src >= 0)
+			if (ctrtool_export_fd(tty_proxy_object.ultimate_stdout_src, "CTRTOOL_CONTAINER_LAUNCHER_CHILD_STDOUT_FD")) {
+				perror("ctrtool_export_fd");
+				return 1;
+			}
+		if (tty_proxy_object.ultimate_stderr_src >= 0)
+			if (ctrtool_export_fd(tty_proxy_object.ultimate_stderr_src, "CTRTOOL_CONTAINER_LAUNCHER_CHILD_STDERR_FD")) {
+				perror("ctrtool_export_fd");
+				return 1;
+			}
+
 		if (lockfile_fd != -1) {
 			int fl = fcntl(lockfile_fd, F_GETFD);
 			if (fl < 0) return 1;
@@ -1386,6 +1451,10 @@ no_emptyfile:;
 			int fl = fcntl(pipe_to_child[1], F_GETFD);
 			if (fl < 0) return 1;
 			if (fcntl(pipe_to_child[1], F_SETFD, ~(FD_CLOEXEC) & fl)) return 1;
+		}
+		if (open_namespaces_and_setenv(proc_pid_dir, open_namespaces)) {
+			perror("open_namespaces_and_setenv");
+			return 1;
 		}
 		char *my_argv[] = {script_file, &c_buf1[6], c_buf2, c_buf3, c_buf4, c_buf5, NULL, NULL, NULL, NULL};
 		if (command_mode) {
@@ -1411,6 +1480,10 @@ no_emptyfile:;
 			return 1;
 		}
 		if (script_pid == 0) {
+			if (open_namespaces_and_setenv(proc_pid_dir, open_namespaces)) {
+				perror("open_namespaces_and_setenv");
+				_exit(255);
+			}
 			char *my_argv[] = {script_file, &c_buf1[6], c_buf2, c_buf3, NULL, NULL, NULL, NULL};
 			if (command_mode) {
 				my_argv[0] = command_shell;
@@ -1437,6 +1510,11 @@ no_emptyfile:;
 		int my_exit_status = 127;
 		if (WIFEXITED(wait_status) && ((my_exit_status = WEXITSTATUS(wait_status)) == 0)) {
 		} else {
+			if (WIFSIGNALED(wait_status)) {
+				fprintf(stderr, "Script terminated with signal %d\n", WTERMSIG(wait_status));
+			} else if (WIFEXITED(wait_status)) {
+				fprintf(stderr, "Script terminated with exit code %d\n", WEXITSTATUS(wait_status));
+			}
 			return my_exit_status;
 		}
 	}
