@@ -122,7 +122,8 @@ default_lookup:
 				"\nThis version of ctrtool has the /proc/self/exe mitigation.\n"
 				"To activate it, prefix the command with 'escape'.\n"
 				"\nThis version of 'ctrtool launcher' has the 'dumpable' and\n"
-				"'clear_caps_before_exec' mitigations.\n", argv[0]);
+				"'clear_caps_before_exec' mitigations.\n"
+				"\nThis version of ctrtool has the set_fds fix.\n", argv[0]);
 		return 255;
 	}
 	return search_command(argv[1], argc-1, &argv[1], 0);
