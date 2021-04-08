@@ -23,8 +23,8 @@ struct ctrtool_relay *ctrtool_relay_new(int in_fd, int out_fd, size_t buffer_siz
 	}
 	struct ctrtool_relay *new_obj = calloc(buffer_size + sizeof(struct ctrtool_relay), 1);
 	if (new_obj == NULL) {
-		ctrtool_make_fd_nonblocking(in_fd, stdin_blocking);
 		ctrtool_make_fd_nonblocking(out_fd, stdout_blocking);
+		ctrtool_make_fd_nonblocking(in_fd, stdin_blocking);
 		return NULL;
 	}
 	new_obj->in_fd = in_fd;
@@ -93,8 +93,8 @@ int ctrtool_relay_release(struct ctrtool_relay *state) {
 	return 0;
 }
 void ctrtool_relay_destroy(struct ctrtool_relay *state) {
-	ctrtool_make_fd_nonblocking(state->in_fd, state->in_blocking);
 	ctrtool_make_fd_nonblocking(state->out_fd, state->out_blocking);
+	ctrtool_make_fd_nonblocking(state->in_fd, state->in_blocking);
 	free(state);
 }
 int ctrtool_relay_can_poll_in(const struct ctrtool_relay *state) {

@@ -38,4 +38,5 @@ void ctrtool_clear_saved_argv(void);
 int ctrtool_prepare_caps_for_exec(int *errno_ptr);
 int ctrtool_make_fd_nonblocking(int fd, int nonblock);
 int ctrtool_make_fd_cloexec(int fd, int cloexec);
+int ctrtool_export_fd(int fd, const char *env_name);
 #define CTRTOOL_CLOSE_NO_ERROR(fd) ctrtool_syscall(SYS_close, fd, 0, 0, 0, 0, 0)

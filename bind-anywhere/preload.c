@@ -180,6 +180,43 @@ do_real_bind:
 __attribute__((visibility("default")))
 int listen(int fd, int backlog) {
 	if (getsockopt_integer(fd, SOL_SOCKET, SO_ACCEPTCONN) == 1) return 0;
+	int sock_domain = getsockopt_integer(fd, SOL_SOCKET, SO_DOMAIN);
+	if (sock_domain < 0) return -1;
+	int sock_type = getsockopt_integer(fd, SOL_SOCKET, SO_TYPE);
+	if (sock_type < 0) return -1;
+	int ret = -1;
+	union {
+		struct sockaddr _generic;
+		struct sockaddr_in inet_addr4;
+		struct sockaddr_in6 inet_addr6;
+	} sock_info = {{0}};
+	socklen_t length = sizeof(sock_info);
+	switch (sock_type) {
+		case SOCK_STREAM:
+		case SOCK_SEQPACKET:
+			switch (sock_domain) {
+				case AF_INET:
+					ret = getsockname(fd, &sock_info._generic, &length);
+					if (ret < 0) return -1;
+					if (sock_info._generic.sa_family == AF_INET) {
+						if (sock_info.inet_addr4.sin_port == 0) {
+							errno = EINVAL;
+							return -1;
+						}
+					}
+					break;
+				case AF_INET6:
+					ret = getsockname(fd, &sock_info._generic, &length);
+					if (ret < 0) return -1;
+					if (sock_info._generic.sa_family == AF_INET6) {
+						if (sock_info.inet_addr6.sin6_port == 0) {
+							errno = EINVAL;
+							return -1;
+						}
+					}
+					break;
+			}
+	}
 	if (real_func_init) {
 		__sync_synchronize();
 		return real_listen(fd, backlog);
