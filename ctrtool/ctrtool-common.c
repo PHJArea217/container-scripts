@@ -160,6 +160,14 @@ void ctrtool_mini_init_set_fds(int *fds, size_t num_fds) {
 	if (num_fds > INT_MAX - 3) {
 		abort();
 	}
+	for (size_t i = 0; i < num_fds; i++) {
+		if (fcntl(fds[i], F_GETFD, 0) < 0) {
+			char txt_buf[] = "fcntl XXXXXXXXXX failed";
+			ctrtool_int32_to_num(fds[i], &txt_buf[6]);
+			ctrtool_cheap_perror(txt_buf, errno);
+			_exit(127);
+		}
+	}
 	int min_fd = 3 + num_fds;
 	for (size_t i = 0; i < num_fds; i++) {
 		if (fds[i] >= 3 && fds[i] < min_fd) {
@@ -167,7 +175,8 @@ void ctrtool_mini_init_set_fds(int *fds, size_t num_fds) {
 			if (new_fd < min_fd) {
 				_exit(127);
 			}
-			if (fds[i] >= 3) close(fds[i]);
+			/* Don't close it, in case we want to use a file descriptor twice */
+			/* if (fds[i] >= 3) close(fds[i]); */
 			fds[i] = new_fd;
 		}
 	}
