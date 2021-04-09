@@ -184,7 +184,7 @@ void ctrtool_mini_init_set_fds(int *fds, size_t num_fds) {
 		if (dup2(fds[i], 3 + i) < 0) {
 			_exit(127);
 		}
-		if (fds[i] >= 3) close(fds[i]);
+/*		if (fds[i] >= 3) close(fds[i]); */
 		fds[i] = 3 + i;
 	}
 	int close_range_return = ctrtool_close_range(min_fd, INT_MAX, 0);
