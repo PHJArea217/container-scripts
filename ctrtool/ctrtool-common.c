@@ -375,7 +375,8 @@ static int ctrtool_parse_rlimit_string(const char *value, size_t limit, rlim_t *
 		return -1;
 	}
 	if (sizeof(rlim_t) < sizeof(unsigned long long)) {
-		if (limit_val >= (1ULL << (sizeof(rlim_t) * CHAR_BIT))) {
+		int s = sizeof(rlim_t) * CHAR_BIT;
+		if (limit_val >= (1ULL << s)) {
 			errno = ERANGE;
 			return -1;
 		}

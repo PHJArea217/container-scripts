@@ -30,7 +30,7 @@ static void msg_to_syslog(struct msghdr *input_msg, size_t returned_size, FILE *
 	gid_t msg_gid = -1;
 	for (struct cmsghdr *cmsg = CMSG_FIRSTHDR(input_msg); cmsg; cmsg = CMSG_NXTHDR(input_msg, cmsg)) {
 		if ((cmsg->cmsg_level == SOL_SOCKET) && (cmsg->cmsg_type == SCM_CREDENTIALS) && (cmsg->cmsg_len >= CMSG_LEN(sizeof(struct ucred)))) {
-			struct ucred *creds = CMSG_DATA(cmsg);
+			struct ucred *creds = (struct ucred *) CMSG_DATA(cmsg);
 			msg_pid = creds->pid;
 			msg_uid = creds->uid;
 			msg_gid = creds->gid;

@@ -8,19 +8,23 @@ CCLDFLAGS_S ?= -Wl,-z,relro,-z,now -static-pie
 all: ctrtool ctrtool-static
 
 ctrtool-static: ctrtool.a arch/current/arch.a
-	$(CCLD) $(CCLDFLAGS_S) -o $@ $^
+	@printf '  CCLD [S]\t%s\n' $@
+	@$(CCLD) $(CCLDFLAGS_S) -o $@ $^
 
 ctrtool: ctrtool.a arch/current/arch.a
-	$(CCLD) $(CCLDFLAGS) -o $@ $^
+	@printf '  CCLD\t%s\n' $@
+	@$(CCLD) $(CCLDFLAGS) -o $@ $^
 
 ctrtool.a: container-launcher.o cl-nsenter.o ctrtool-common.o ctrtool_options.o ctrtool_tty_proxy.o ctrtool_relay.o container-rootfs-mount.o debug_shell.o mini-init.o mount_seq.o ns_open_file.o pidfd_ctl.o reset_cgroup.o set_fds.o simple-renameat2.o syslogd.o tty_proxy.o main.o
-	$(AR) r $@ $^
+	@printf '  AR\t%s\n' $@
+	@$(AR) r $@ $^
 
 arch/current/arch.a:
 	make -C arch all
 
 %.o: %.c ctrtool-common.h arch/current/arch.a
-	$(CC) $(CFLAGS) -c -o $@ $<
+	@printf '  CC\t%s\n' $@
+	@$(CC) $(CFLAGS) -c -o $@ $<
 
 clean:
 	rm -f *.o ctrtool ctrtool-static ctrtool.a

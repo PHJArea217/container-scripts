@@ -213,7 +213,7 @@ int ctr_scripts_ns_open_file_main(int argc, char **argv) {
 					if (inet_pton(AF_INET, addr_part, &result->sin_addr) != 1) {
 						goto no_addr_part;
 					}
-					current->bind_address = result;
+					current->bind_address = (struct sockaddr *) result;
 					current->bind_address_len = sizeof(struct sockaddr_in);
 				} else {
 					struct sockaddr_in6 *result = calloc(sizeof(struct sockaddr_in6), 1);
@@ -226,7 +226,7 @@ int ctr_scripts_ns_open_file_main(int argc, char **argv) {
 						if (!scope_id_part) goto no_addr_part;
 						result->sin6_scope_id = strtoul(scope_id_part, NULL, 0);
 					}
-					current->bind_address = result;
+					current->bind_address = (struct sockaddr *) result;
 					current->bind_address_len = sizeof(struct sockaddr_in6);
 					if (scope_id_part) {
 						current->scope_id_name = strdup(scope_id_part);
