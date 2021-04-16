@@ -20,6 +20,7 @@
 #define CTRTOOL_NS_OPEN_FILE_MOUNT 'm'
 #define CTRTOOL_NS_OPEN_FILE_NETWORK_SOCKET 'n'
 #define CTRTOOL_NS_OPEN_FILE_NETWORK_TUNTAP 'T'
+#define CTRTOOL_NS_OPEN_FILE_NORMAL 'f'
 struct ns_open_file_req {
 	int type;
 	unsigned enter_userns:1;
@@ -118,12 +119,13 @@ int ctr_scripts_ns_open_file_main(int argc, char **argv) {
 	struct ns_open_file_req *current = NULL;
 	const char *tun_name = "/dev/net/tun";
 	int opt = 0;
-	while ((opt = getopt(argc, argv, "+mnTUM:N:d:t:p:l:4:6:z:")) > 0) {
+	while ((opt = getopt(argc, argv, "+mnTUM:N:d:t:p:l:4:6:z:f")) > 0) {
 		char *d_optarg = NULL;
 		switch (opt) {
 			case 'm':
 			case 'n':
 			case 'T':
+			case 'f':
 				if (ctrtool_arraylist_expand_s(&things_to_add, NULL, 10, (void **) &current)) {
 					perror("ctrtool_arraylist_expand");
 					return 1;
@@ -240,7 +242,7 @@ int ctr_scripts_ns_open_file_main(int argc, char **argv) {
 		}
 		continue;
 no_opt:
-		fprintf(stderr, "-%c may not be used before -m, -n, or -T\n", opt);
+		fprintf(stderr, "-%c may not be used before -m, -n, -T, or -f\n", opt);
 no_mem:
 		return 1;
 already_address:
@@ -263,6 +265,14 @@ no_addr_part:
 		current = &list_base[i];
 		int out_fd = -1;
 		if (current->ns_path) {
+			if (current->type == 'f') {
+				out_fd = open(current->ns_path, O_RDONLY|O_NOCTTY);
+				if (out_fd < 0) {
+					perror("open");
+					return 2;
+				}
+				goto end_f;
+			}
 			int *shared_mem_region = mmap(NULL, 4096, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
 			if (shared_mem_region == MAP_FAILED) {
 				perror("mmap");
@@ -373,6 +383,7 @@ no_addr_part:
 			}
 			out_fd = mem_record[0];
 		}
+end_f:
 		if (fcntl(out_fd, F_GETFD, 0) < 0) {
 			perror("fcntl");
 			return 2;
