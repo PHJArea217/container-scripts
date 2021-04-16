@@ -176,7 +176,7 @@ static const char *child_func(struct child_data *data, int *errno_ptr, struct ct
 	}
 	int devnull_fd = -1;
 	if (data->log_fd >= 0) {
-		int devnull_fd = ctrtool_syscall_errno(SYS_openat, errno_ptr, AT_FDCWD, "/dev/null", O_RDONLY, 0, 0, 0);
+		devnull_fd = ctrtool_syscall_errno(SYS_openat, errno_ptr, AT_FDCWD, "/dev/null", O_RDONLY, 0, 0, 0);
 		if (devnull_fd < 0) return "!open /dev/null";
 	}
 	/* step 1.7: process nsenter2 requests */
