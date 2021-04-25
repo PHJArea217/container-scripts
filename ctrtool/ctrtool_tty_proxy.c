@@ -356,6 +356,7 @@ after_poll:
 		if ((child_wait) || (stdin_relay->state == CTRTOOL_RELAY_STATE_TERMINATED)) {
 			fd_wait |= 2;
 			stdin_relay->state = CTRTOOL_RELAY_STATE_TERMINATED;
+			stdin_relay->buffer_ptr = 0;
 		}
 		if ((stdout_relay->state == CTRTOOL_RELAY_STATE_TERMINATED) && ((!stderr_relay) || (stderr_relay->state == CTRTOOL_RELAY_STATE_TERMINATED))) {
 			fd_wait |= 1;
