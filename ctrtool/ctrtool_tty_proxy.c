@@ -240,7 +240,8 @@ int ctrtool_tty_proxy_mainloop(struct ctrtool_tty_proxy *options, pid_t child_pi
 	}
 	if (out_pid > 0) {
 		child_wait = 1;
-#if 0
+		fd_wait = 2;
+#if 0		
 		ret = 0;
 		goto last;
 #endif
@@ -352,8 +353,9 @@ after_poll:
 		if (pfds[5].revents) {
 			ctrtool_relay_release(stderr_relay);
 		}
-		if (stdin_relay->state == CTRTOOL_RELAY_STATE_TERMINATED) {
+		if ((child_wait) || (stdin_relay->state == CTRTOOL_RELAY_STATE_TERMINATED)) {
 			fd_wait |= 2;
+			stdin_relay->state = CTRTOOL_RELAY_STATE_TERMINATED;
 		}
 		if ((stdout_relay->state == CTRTOOL_RELAY_STATE_TERMINATED) && ((!stderr_relay) || (stderr_relay->state == CTRTOOL_RELAY_STATE_TERMINATED))) {
 			fd_wait |= 1;
