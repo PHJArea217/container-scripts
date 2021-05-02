@@ -119,7 +119,8 @@ int ctr_scripts_ns_open_file_main(int argc, char **argv) {
 	struct ns_open_file_req *current = NULL;
 	const char *tun_name = "/dev/net/tun";
 	int opt = 0;
-	while ((opt = getopt(argc, argv, "+mnTUM:N:d:t:p:l:4:6:z:f")) > 0) {
+	unsigned long i_offset = 0;
+	while ((opt = getopt(argc, argv, "+mnTUM:N:d:t:p:l:4:6:z:fo:")) > 0) {
 		char *d_optarg = NULL;
 		switch (opt) {
 			case 'm':
@@ -237,6 +238,9 @@ int ctr_scripts_ns_open_file_main(int argc, char **argv) {
 				}
 				break;
 				/* FIXME: implement -z (arbitrary hex string as socket address, with domain included) */
+			case 'o':
+				i_offset = strtoul(optarg, NULL, 0);
+				break;
 			default:
 				return 1;
 		}
@@ -390,7 +394,7 @@ end_f:
 		}
 		char env_var_name[60] = {0};
 		char env_var_value[15] = {0};
-		if (snprintf(env_var_name, sizeof(env_var_name), "CTRTOOL_NS_OPEN_FILE_FD_%lu", (unsigned long) i) <= 0) {
+		if (snprintf(env_var_name, sizeof(env_var_name), "CTRTOOL_NS_OPEN_FILE_FD_%lu", i_offset + (unsigned long) i) <= 0) {
 			perror("snprintf");
 			return 2;
 		}
