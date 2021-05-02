@@ -10,7 +10,34 @@
 #include <linux/sched.h>
 #include <syscall.h>
 #include <string.h>
+#include <sys/ioctl.h>
+#include <linux/sockios.h>
+#include <linux/nsfs.h>
+#include <sys/vfs.h>
+#include <linux/magic.h>
 #include "ctrtool-common.h"
+static int ensure_fd_fs(int fd, unsigned int fs_type) {
+	struct statfs stat_buf;
+	if (fstatfs(fd, &stat_buf)) {
+		return -1;
+	}
+	if (stat_buf.f_type == fs_type) {
+		return 0;
+	}
+	return 1;
+}
+static void ensure_fd_fs_wrap(int fd, unsigned int fs_type, const char *fs_name) {
+	switch (ensure_fd_fs(fd, fs_type)) {
+		case -1:
+			perror("fstatfs");
+			exit(255);
+			return;
+		case 1:
+			fprintf(stderr, "File descriptor %d is not of type %s\n", fd, fs_name);
+			exit(253);
+			return;
+	}
+}
 int ctr_scripts_pidfd_ctl_main(int argc, char **argv) {
 	ctrtool_clear_saved_argv();
 	if (signal(SIGCHLD, SIG_DFL) == SIG_ERR) {
@@ -20,10 +47,12 @@ int ctr_scripts_pidfd_ctl_main(int argc, char **argv) {
 	struct ctrtool_arraylist fds_to_export = {.start = 0, .nr = 0, .max = 0, .elem_size = sizeof(int)};
 	int reg_1 = -1;
 	int reg_2 = -1;
+	int reg_3 = -1;
 	pid_t current_pid = getpid();
+	int require_program = 1;
 	while (1) {
 		char tmp_buf[40] = {0};
-		int opt = getopt(argc, argv, "+1:2:e:E:f:n:c:F:xI");
+		int opt = getopt(argc, argv, "+I1:2:e:E:v:f:n:c:F:xyNupO");
 		if (opt <= 0) break;
 		switch (opt) {
 			case 'I':
@@ -57,6 +86,19 @@ int ctr_scripts_pidfd_ctl_main(int argc, char **argv) {
 					return 255;
 				}
 				if (snprintf(tmp_buf, 40, "%d", reg_2) <= 0) {
+					return 255;
+				}
+				if (setenv(optarg, tmp_buf, 1)) {
+					perror("setenv");
+					return 255;
+				}
+				break;
+			case 'v':
+				if (ctrtool_arraylist_expand(&fds_to_export, &reg_3, 10)) {
+					perror("ctrtool_arraylist_expand");
+					return 255;
+				}
+				if (snprintf(tmp_buf, 40, "%d", reg_3) <= 0) {
 					return 255;
 				}
 				if (setenv(optarg, tmp_buf, 1)) {
@@ -115,14 +157,74 @@ int ctr_scripts_pidfd_ctl_main(int argc, char **argv) {
 				reg_1 = reg_2;
 				reg_2 = tmp;
 				break;
+			case 'y':
+				tmp = reg_2;
+				reg_2 = reg_3;
+				reg_3 = tmp;
+				break;
+			case 'N':
+				if (1) {
+					ensure_fd_fs_wrap(reg_2, SOCKFS_MAGIC, "SOCKFS_MAGIC");
+					int i_result = ioctl(reg_2, SIOCGSKNS, 0);
+					if (i_result < 0) {
+						perror("SIOCGSKNS");
+						return 255;
+					}
+					reg_3 = i_result;
+				}
+				break;
+			case 'u':
+				if (1) {
+					ensure_fd_fs_wrap(reg_2, NSFS_MAGIC, "NSFS_MAGIC");
+					int i_result = ioctl(reg_2, NS_GET_USERNS, 0);
+					if (i_result < 0) {
+						perror("NS_GET_USERNS");
+						return 255;
+					}
+					reg_3 = i_result;
+				}
+				break;
+			case 'p':
+				if (1) {
+					ensure_fd_fs_wrap(reg_2, NSFS_MAGIC, "NSFS_MAGIC");
+					int i_result = ioctl(reg_2, NS_GET_PARENT, 0);
+					if (i_result < 0) {
+						perror("NS_GET_PARENT");
+						return 255;
+					}
+					reg_3 = i_result;
+				}
+				break;
+			case 'O':
+				if (1) {
+					ensure_fd_fs_wrap(reg_2, NSFS_MAGIC, "NSFS_MAGIC");
+					uid_t uid = -1;
+					int i_result = ioctl(reg_2, NS_GET_OWNER_UID, &uid);
+					if (i_result) {
+						perror("NS_GET_OWNER_UID");
+						return 255;
+					}
+					printf("%lu\n", (unsigned long) uid);
+					fflush(stdout);
+					if (ferror(stdout)) {
+						perror("stdout: write error");
+						return 255;
+					}
+					require_program = 0;
+				}
+				break;
 			default:
 				return 254;
 				break;
 		}
 	}
 	if (!argv[optind]) {
-		fprintf(stderr, "%s: No program specified\n", argv[0]);
-		return 254;
+		if (require_program) {
+			fprintf(stderr, "%s: No program specified\n", argv[0]);
+			return 254;
+		} else {
+			return 0;
+		}
 	}
 	int *list = fds_to_export.start;
 	for (size_t i = 0; i < fds_to_export.nr; i++) {
