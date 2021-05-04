@@ -164,7 +164,7 @@ int ctr_scripts_container_rootfs_mount_main(int argc, char **argv) {
 	} else if (do_mount_proc) {
 		proc_fd = -2;
 	}
-	check_syscall(mount("none", mount_directory, "tmpfs", 0, get_arg_default(get_arg("tmpfs_mount_opts"), "mode=0755")), "mount tmpfs");
+	check_syscall(mount("/dev/null", mount_directory, "tmpfs", 0, get_arg_default(get_arg("tmpfs_mount_opts"), "mode=0755")), "mount tmpfs");
 	check_syscall(chdir(mount_directory), "cd mount directory");
 	free(mount_directory);
 	mount_directory = NULL;
