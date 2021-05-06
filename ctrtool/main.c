@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <sys/eventfd.h>
 #include "ctrtool-common.h"
+int ctr_scripts_chroot_pivot_main(int argc, char **argv);
 int ctr_scripts_container_launcher_main(int argc, char **argv);
 int ctr_scripts_container_rootfs_mount_main(int argc, char **argv);
 int ctr_scripts_mini_init_main(int argc, char **argv);
@@ -37,6 +38,7 @@ static int ctr_scripts_escape_main(int argc, char **argv) {
 }
 static struct command_def command_list[] = {
 	{"_ctrtool_escaped", ctr_scripts_escape_main},
+	{"chroot_pivot", ctr_scripts_chroot_pivot_main},
 	{"container-launcher", ctr_scripts_container_launcher_main},
 	{"container-rootfs-mount", ctr_scripts_container_rootfs_mount_main},
 	{"debug_shell", ctr_scripts_debug_shell_main},
