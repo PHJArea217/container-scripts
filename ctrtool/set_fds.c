@@ -44,7 +44,7 @@ int ctr_scripts_set_fds_main(int argc, char **argv) {
 			if (do_env) {
 				int do_unset = 0;
 				switch (*s) {
-					case '-':
+					case ':':
 						do_unset = 1;
 					case '/':
 						env_name = &s[1];
@@ -75,7 +75,7 @@ int ctr_scripts_set_fds_main(int argc, char **argv) {
 					case '9':
 						break;
 					default:
-						fprintf(stderr, "fd_list must be a series of numbers, /ENV, or -ENV separated by commas\n");
+						fprintf(stderr, "fd_list must be a series of numbers, /ENV, or :ENV separated by commas\n");
 						return 1;
 				}
 				if (do_unset) {
