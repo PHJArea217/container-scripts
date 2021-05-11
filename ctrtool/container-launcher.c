@@ -502,6 +502,7 @@ int ctr_scripts_container_launcher_main(int argc, char **argv) {
 		{"uts", no_argument, NULL, 'u'},
 		{"wait", no_argument, NULL, 'w'},
 		{"write-pid", required_argument, NULL, 'P'},
+		{NULL, 0, 0, 0}
 	};
 	while ((opt = getopt_long(argc, argv, "+CimnpUuS:G:gNswx:I:ka:b:f:B:O:tER:L:H:X:de:r:VM:K:P:FDQ:v:q", long_options, NULL)) >= 0) {
 		switch(opt) {
