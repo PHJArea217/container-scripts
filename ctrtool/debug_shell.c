@@ -17,7 +17,8 @@ int ctr_scripts_debug_shell_main(int argc, char **argv) {
 	char **shell_command = NULL;
 	size_t shell_command_len = 0;
 	int do_listen = 0;
-	while ((opt = getopt(argc, argv, "+c:f:l")) > 0) {
+	int force_unix = 1;
+	while ((opt = getopt(argc, argv, "+c:f:luE")) > 0) {
 		switch (opt) {
 			case 'c':
 				shell_command = reallocarray(shell_command, ++shell_command_len, sizeof(char *));
@@ -31,6 +32,12 @@ int ctr_scripts_debug_shell_main(int argc, char **argv) {
 				break;
 			case 'l':
 				do_listen = 1;
+				break;
+			case 'u':
+				force_unix = 1;
+				break;
+			case 'E':
+				force_unix = 0;
 				break;
 			default:
 				return -1;
@@ -59,6 +66,18 @@ int ctr_scripts_debug_shell_main(int argc, char **argv) {
 		}
 		if ((optsize != sizeof(int)) || (!opt)) {
 			fprintf(stderr, "The socket must be an accepting socket\n");
+			return 1;
+		}
+	}
+	if (force_unix) {
+		opt = 0;
+		socklen_t optsize = sizeof(int);
+		if (getsockopt(accept_fd, SOL_SOCKET, SO_DOMAIN, &opt, &optsize)) {
+			perror("getsockopt");
+			return 1;
+		}
+		if ((optsize != sizeof(int)) || (opt != AF_UNIX)) {
+			fprintf(stderr, "The socket must be of type AF_UNIX, use -E to override\n");
 			return 1;
 		}
 	}
