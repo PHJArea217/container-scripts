@@ -1,5 +1,6 @@
 #define _GNU_SOURCE
 #include "ctrtool-common.h"
+#include "ctrtool_options.h"
 #include <syscall.h>
 #include <fcntl.h>
 #include <sys/socket.h>
@@ -40,6 +41,35 @@ struct ns_open_file_req {
 	struct sockaddr *bind_address;
 	socklen_t bind_address_len;
 	char *scope_id_name;
+};
+static struct ctrtool_opt_element domain_values[] = {
+	{.name = "inet", .value = {.value = AF_INET}},
+	{.name = "inet6", .value = {.value = AF_INET6}},
+	{.name = "netlink", .value = {.value = AF_NETLINK}},
+	{.name = "packet", .value = {.value = AF_PACKET}},
+	{.name = "unix", .value = {.value = AF_UNIX}},
+	{.name = "vsock", .value = {.value = AF_VSOCK}},
+};
+static struct ctrtool_opt_element type_values[] = {
+	{.name = "dgram", .value = {.value = SOCK_DGRAM}},
+	{.name = "dgram_nb", .value = {.value = SOCK_DGRAM|SOCK_NONBLOCK}},
+	{.name = "raw", .value = {.value = SOCK_RAW}},
+	{.name = "raw_nb", .value = {.value = SOCK_RAW|SOCK_NONBLOCK}},
+	{.name = "seqpacket", .value = {.value = SOCK_SEQPACKET}},
+	{.name = "seqpacket_nb", .value = {.value = SOCK_SEQPACKET|SOCK_NONBLOCK}},
+	{.name = "stream", .value = {.value = SOCK_STREAM}},
+	{.name = "stream_nb", .value = {.value = SOCK_STREAM|SOCK_NONBLOCK}},
+	{.name = "tcp", .value = {.value = SOCK_STREAM}},
+	{.name = "tcp_nb", .value = {.value = SOCK_STREAM|SOCK_NONBLOCK}},
+	{.name = "udp", .value = {.value = SOCK_DGRAM}},
+	{.name = "udp_nb", .value = {.value = SOCK_DGRAM|SOCK_NONBLOCK}},
+};
+static struct ctrtool_opt_element protocol_values[] = {
+	{.name = "icmp", .value = {.value = IPPROTO_ICMP}},
+	{.name = "ip", .value = {.value = IPPROTO_IP}},
+	{.name = "ipv6", .value = {.value = IPPROTO_IPV6}},
+	{.name = "tcp", .value = {.value = IPPROTO_TCP}},
+	{.name = "udp", .value = {.value = IPPROTO_UDP}},
 };
 static int process_req(struct ns_open_file_req *req_text, int *result_fd, const char *tun_name) {
 	int _f = -1;
@@ -168,15 +198,15 @@ int ctr_scripts_ns_open_file_main(int argc, char **argv) {
 				break;
 			case 'd':
 				if (!current) goto no_opt;
-				current->sock_domain = atoi(optarg);
+				current->sock_domain = ctrtool_options_parse_arg_int_with_preset(optarg, domain_values, sizeof(domain_values)/sizeof(domain_values[0]), NULL, 0);
 				break;
 			case 't':
 				if (!current) goto no_opt;
-				current->sock_type = atoi(optarg);
+				current->sock_type = ctrtool_options_parse_arg_int_with_preset(optarg, type_values, sizeof(type_values)/sizeof(type_values[0]), NULL, 0);
 				break;
 			case 'p':
 				if (!current) goto no_opt;
-				current->sock_protocol = atoi(optarg);
+				current->sock_protocol = ctrtool_options_parse_arg_int_with_preset(optarg, protocol_values, sizeof(protocol_values)/sizeof(protocol_values[0]), NULL, 0);
 				break;
 			case 'l':
 				if (!current) goto no_opt;
