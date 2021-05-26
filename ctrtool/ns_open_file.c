@@ -19,6 +19,8 @@
 #include <sys/ioctl.h>
 #include <linux/nsfs.h>
 #include <netinet/tcp.h>
+#include <sys/statfs.h>
+#include <linux/magic.h>
 #define CTRTOOL_NS_OPEN_FILE_MOUNT 'm'
 #define CTRTOOL_NS_OPEN_FILE_NETWORK_SOCKET 'n'
 #define CTRTOOL_NS_OPEN_FILE_NETWORK_TUNTAP 'T'
@@ -351,7 +353,16 @@ no_addr_part:
 				perror("open namespace");
 				return 2;
 			}
-			long child_pid = ctrtool_clone_onearg(CLONE_FILES|SIGCHLD);
+			struct statfs ns_fd_fs = {0};
+			if (fstatfs(ns_fd, &ns_fd_fs)) {
+				perror("statfs");
+				return 2;
+			}
+			if (ns_fd_fs.f_type != NSFS_MAGIC) {
+				fprintf(stderr, "Namespace file %s is not NSFS_MAGIC\n", current->ns_path);
+				return 2;
+			}
+			long child_pid = ctrtool_clone_onearg(CLONE_FILES|SIGCHLD|CLONE_VFORK);
 			if (child_pid < 0) {
 				errno = -child_pid;
 				perror("clone()");
@@ -360,7 +371,10 @@ no_addr_part:
 			if (child_pid == 0) {
 				if (current->enter_userns) {
 					if (prctl(PR_SET_DUMPABLE, 0, 0, 0, 0)) {
-						perror("PR_SET_DUMPABLE");
+						shared_mem_region[0] = -1;
+						shared_mem_region[1] = errno;
+						__sync_synchronize();
+						shared_mem_region[2] = 1;
 						ctrtool_exit(255);
 					}
 					int userns_fd = ioctl(ns_fd, NS_GET_USERNS, 0);
