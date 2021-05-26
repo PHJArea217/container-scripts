@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <ctype.h>
 #include <errno.h>
+#include <limits.h>
 static struct ctrtool_opt_element boolean_values[] = {
 	{.name = "false", .value = {.value = 0}},
 	{.name = "no", .value = {.value = 0}},
@@ -32,7 +33,15 @@ static uint64_t parse_arg_int(const char *arg, const char *error_msg, int *has_e
 	}
 	if (isdigit(arg[0])) {
 		if (has_error) *has_error = 0;
-		return strtoull(arg, NULL, 0);
+		int saved_errno = errno;
+		errno = 0;
+		unsigned long long result = strtoull(arg, NULL, 0);
+		if ((errno) || ((sizeof(unsigned long long) > sizeof(uint64_t)) && (result >= (1ULL << (sizeof(uint64_t) * CHAR_BIT))))) {
+			fprintf(stderr, "Number invalid or too large: %s\n", arg);
+			exit(1);
+		}
+		errno = saved_errno;
+		return result;
 	}
 	if (has_error) *has_error = 1;
 	if (error_msg) {
