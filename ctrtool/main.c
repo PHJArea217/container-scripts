@@ -118,14 +118,10 @@ int main(int argc, char **argv) {
 default_lookup:
 	if (argc < 2) {
 		fprintf(stderr, "Usage: %s\n"
-				"\t[ escape ] [ debug_shell | init | launcher | mount_seq\n"
-				"\t| ns_open_file | renameat2 | reset_cgroup | rootfs-mount\n"
-				"\t| set_fds | syslogd ] [ARGUMENTS]\n"
-				"\nThis version of ctrtool has the /proc/self/exe mitigation.\n"
-				"To activate it, prefix the command with 'escape'.\n"
-				"\nThis version of 'ctrtool launcher' has the 'dumpable' and\n"
-				"'clear_caps_before_exec' mitigations.\n"
-				"\nThis version of ctrtool has the set_fds fix.\n", argv[0]);
+				"\t[ escape ] [ chroot_pivot | debug_shell | init | init2 | launcher\n"
+				"\t| mount_seq | ns_open_file | pidfd_ctl | renameat2 | reset_cgroup\n"
+				"\t| rootfs-mount | set_fds | syslogd | tty_proxy ] [ARGUMENTS]\n"
+				"\nFor more information, see https://website.peterjin.org/wiki/Help:Ctrtool\n\n", argv[0]);
 		return 255;
 	}
 	return search_command(argv[1], argc-1, &argv[1], 0);
