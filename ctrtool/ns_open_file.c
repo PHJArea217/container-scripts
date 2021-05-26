@@ -17,6 +17,7 @@
 #include <net/if.h>
 #include <sys/ioctl.h>
 #include <linux/nsfs.h>
+#include <netinet/tcp.h>
 #define CTRTOOL_NS_OPEN_FILE_MOUNT 'm'
 #define CTRTOOL_NS_OPEN_FILE_NETWORK_SOCKET 'n'
 #define CTRTOOL_NS_OPEN_FILE_NETWORK_TUNTAP 'T'
@@ -28,6 +29,9 @@ struct ns_open_file_req {
 	unsigned set_reuseport_or_no_pi:1;
 	unsigned set_freebind:1;
 	unsigned set_transparent:1;
+	unsigned set_defer_accept:1;
+	unsigned set_v6only:2;
+	unsigned set_nodelay:1;
 	const char *ns_path;
 	int sock_domain;
 	int sock_type;
@@ -71,6 +75,21 @@ static int process_req(struct ns_open_file_req *req_text, int *result_fd, const 
 			}
 			if (req_text->set_transparent) {
 				if (setsockopt(_f, SOL_IP, IP_TRANSPARENT, &one, sizeof(one))) goto close_f_fail;
+			}
+			if (req_text->set_defer_accept) {
+				if (setsockopt(_f, SOL_TCP, TCP_DEFER_ACCEPT, &one, sizeof(one))) goto close_f_fail;
+			}
+			int sopt_val = 1;
+			switch (req_text->set_v6only) {
+				case 1:
+					sopt_val = 0;
+					/* fallthrough */
+				case 2:
+					if (setsockopt(_f, SOL_IPV6, IPV6_V6ONLY, &sopt_val, sizeof(sopt_val))) goto close_f_fail;
+					break;
+			}
+			if (req_text->set_nodelay) {
+				if (setsockopt(_f, SOL_TCP, TCP_NODELAY, &one, sizeof(one))) goto close_f_fail;
 			}
 			if (req_text->bind_address) {
 				if (req_text->bind_address_len == sizeof(struct sockaddr_in6)) {
@@ -198,6 +217,18 @@ int ctr_scripts_ns_open_file_main(int argc, char **argv) {
 							case 't':
 								current->set_transparent = 1;
 								break;
+							case 'd':
+								current->set_defer_accept = 1;
+								break;
+							case 'o':
+								current->set_v6only = 2;
+								break;
+							case 'O':
+								current->set_v6only = 1;
+								break;
+							case 'e':
+								current->set_nodelay = 1;
+								break;
 							case 'I':
 								numeric_scope_id = 1;
 								break;
@@ -211,6 +242,7 @@ int ctr_scripts_ns_open_file_main(int argc, char **argv) {
 				}
 				if (opt == '4') {
 					struct sockaddr_in *result = calloc(sizeof(struct sockaddr_in), 1);
+					if (!result) goto no_mem;
 					result->sin_family = AF_INET;
 					result->sin_port = port_part_n;
 					if (inet_pton(AF_INET, addr_part, &result->sin_addr) != 1) {
@@ -220,6 +252,7 @@ int ctr_scripts_ns_open_file_main(int argc, char **argv) {
 					current->bind_address_len = sizeof(struct sockaddr_in);
 				} else {
 					struct sockaddr_in6 *result = calloc(sizeof(struct sockaddr_in6), 1);
+					if (!result) goto no_mem;
 					result->sin6_family = AF_INET6;
 					result->sin6_port = port_part_n;
 					if (inet_pton(AF_INET6, addr_part, &result->sin6_addr) != 1) {
