@@ -421,7 +421,12 @@ no_addr_part:
 			out_fd = mem_record[0];
 		}
 end_f:
-		if (fcntl(out_fd, F_GETFD, 0) < 0) {
+		;int fcntl_flags = fcntl(out_fd, F_GETFD, 0);
+		if (fcntl_flags < 0) {
+			perror("fcntl");
+			return 2;
+		}
+		if (fcntl(out_fd, F_SETFD, (fcntl_flags & ~FD_CLOEXEC))) {
 			perror("fcntl");
 			return 2;
 		}
