@@ -362,7 +362,7 @@ no_addr_part:
 				fprintf(stderr, "Namespace file %s is not NSFS_MAGIC\n", current->ns_path);
 				return 2;
 			}
-			long child_pid = ctrtool_clone_onearg(CLONE_FILES|SIGCHLD|CLONE_VFORK);
+			long child_pid = ctrtool_clone_onearg(CLONE_FILES|SIGCHLD);
 			if (child_pid < 0) {
 				errno = -child_pid;
 				perror("clone()");
