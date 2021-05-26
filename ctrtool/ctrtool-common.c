@@ -503,7 +503,7 @@ int ctrtool_save_argv(int argc, char **argv) {
 }
 void ctrtool_clear_saved_argv(void) {
 	if (ctrtool_already_escaped) return;
-	assert(ctrtool_saved_argv);
+	ctrtool_assert(ctrtool_saved_argv);
 	char **argv_p = ctrtool_saved_argv;
 	while (argv_p[0]) {
 		free(argv_p[0]);

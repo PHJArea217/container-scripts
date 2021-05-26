@@ -3,6 +3,7 @@
 #include <sys/uio.h>
 #include <stdint.h>
 #include <sys/resource.h>
+#include <stdlib.h>
 #include "arch/current/arch-functions.h"
 struct ctrtool_arraylist {
 	void *start;
@@ -40,3 +41,4 @@ int ctrtool_make_fd_nonblocking(int fd, int nonblock);
 int ctrtool_make_fd_cloexec(int fd, int cloexec);
 int ctrtool_export_fd(int fd, const char *env_name);
 #define CTRTOOL_CLOSE_NO_ERROR(fd) ctrtool_syscall(SYS_close, fd, 0, 0, 0, 0, 0)
+#define ctrtool_assert(expr) do {if (expr) {} else {fprintf(stderr, "ctrtool_assert %s failed on %s:%d. Aborting.\n", #expr, __FILE__, __LINE__); abort();}} while (0)

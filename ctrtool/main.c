@@ -89,7 +89,7 @@ int main(int argc, char **argv) {
 	while (1) {
 //		int dummy_socket = socket(AF_UNIX, SOCK_STREAM|SOCK_CLOEXEC, 0);
 		int dummy_socket = eventfd(0, EFD_NONBLOCK);
-		if (dummy_socket < 0) return 1;
+		if (dummy_socket < 0) return -1;
 		if (dummy_socket >= 3) {
 			close(dummy_socket);
 			break;

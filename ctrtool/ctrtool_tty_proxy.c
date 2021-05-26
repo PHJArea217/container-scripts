@@ -14,6 +14,7 @@
 #include <signal.h>
 #include <wait.h>
 #include <string.h>
+#include <stdio.h>
 int ctrtool_open_tty_proxy(struct ctrtool_tty_proxy *options) {
 	if (options->width < 0) options->width = 0;
 	if (options->height < 0) options->height = 0;
@@ -79,7 +80,7 @@ close_stderr_pipe:
 /* TODO: cleanup */
 #define CHOWN_IF_VALID_FD(fd, uid, gid) do {if (fd >= 0) {if (fd < 3) {errno = EINVAL; return -1;} else {if (fchown(fd, uid, gid)) return -1;}}} while (0)
 int ctrtool_tty_proxy_chown_slave(struct ctrtool_tty_proxy *options, uid_t uid, gid_t gid) {
-	assert(options->is_init);
+	ctrtool_assert(options->is_init);
 	CHOWN_IF_VALID_FD(options->stdin_pipe_fd[0], uid, gid);
 	CHOWN_IF_VALID_FD(options->stdout_pipe_fd[1], uid, gid);
 	CHOWN_IF_VALID_FD(options->stderr_pipe_fd[1], uid, gid);
@@ -107,7 +108,7 @@ int ctrtool_tty_proxy_chown_slave(struct ctrtool_tty_proxy *options, uid_t uid, 
 	return 0;
 }
 int ctrtool_tty_proxy_child(struct ctrtool_tty_proxy *options) {
-	assert(options->is_init);
+	ctrtool_assert(options->is_init);
 	if (options->use_stdio_pipe) {
 		CTRTOOL_CLOSE_NO_ERROR(options->stdout_pipe_fd[0]);
 		CTRTOOL_CLOSE_NO_ERROR(options->stdin_pipe_fd[1]);
@@ -166,7 +167,7 @@ int ctrtool_tty_proxy_child(struct ctrtool_tty_proxy *options) {
 	return 0;
 }
 void ctrtool_tty_proxy_master(struct ctrtool_tty_proxy *options, int make_cloexec) {
-	assert(options->is_init);
+	ctrtool_assert(options->is_init);
 	if (options->use_stdio_pipe) {
 		CTRTOOL_CLOSE_NO_ERROR(options->stdout_pipe_fd[1]);
 		CTRTOOL_CLOSE_NO_ERROR(options->stdin_pipe_fd[0]);
@@ -174,8 +175,8 @@ void ctrtool_tty_proxy_master(struct ctrtool_tty_proxy *options, int make_cloexe
 		options->ultimate_stdout_src = options->stdout_pipe_fd[0];
 		options->ultimate_stderr_src = -1;
 		if (make_cloexec) {
-			assert(ctrtool_make_fd_cloexec(options->stdin_pipe_fd[1], 1) == 0);
-			assert(ctrtool_make_fd_cloexec(options->stdout_pipe_fd[0], 1) == 0);
+			ctrtool_assert(ctrtool_make_fd_cloexec(options->stdin_pipe_fd[1], 1) == 0);
+			ctrtool_assert(ctrtool_make_fd_cloexec(options->stdout_pipe_fd[0], 1) == 0);
 		}
 	} else {
 		CTRTOOL_CLOSE_NO_ERROR(options->slave_fd);
@@ -183,14 +184,14 @@ void ctrtool_tty_proxy_master(struct ctrtool_tty_proxy *options, int make_cloexe
 		options->ultimate_stdout_src = options->master_fd;
 		options->ultimate_stderr_src = -1;
 		if (make_cloexec) {
-			assert(ctrtool_make_fd_cloexec(options->master_fd, 1) == 0);
+			ctrtool_assert(ctrtool_make_fd_cloexec(options->master_fd, 1) == 0);
 		}
 	}
 	if (options->use_stderr_pipe) {
 		CTRTOOL_CLOSE_NO_ERROR(options->stderr_pipe_fd[1]);
 		options->ultimate_stderr_src = options->stderr_pipe_fd[0];
 		if (make_cloexec) {
-			assert(ctrtool_make_fd_cloexec(options->stderr_pipe_fd[0], 1) == 0);
+			ctrtool_assert(ctrtool_make_fd_cloexec(options->stderr_pipe_fd[0], 1) == 0);
 		}
 	}
 }
@@ -213,7 +214,7 @@ static int block_sigchld(sigset_t *poll_sigset) {
 	return 0;
 }
 int ctrtool_tty_proxy_mainloop(struct ctrtool_tty_proxy *options, pid_t child_pid, int *child_wait_status) {
-	assert(options->is_init);
+	ctrtool_assert(options->is_init);
 	struct termios orig_ios = {0};
 	int restore_term = 0;
 	int restore_sigmask = 0;
