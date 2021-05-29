@@ -95,6 +95,14 @@ static int process_req(struct ns_open_file_req *req_text, int *result_fd, const 
 				result_fd[1] = errno;
 				return 2;
 			}
+#if 0
+			/* Might be a good safety thing but it will break socketbox-preload. */
+			if (unshare(CLONE_FILES)) {
+				result_fd[0] = -1;
+				result_fd[1] = errno;
+				return 2;
+			}
+#endif
 			int one = 1;
 			if (req_text->set_reuseaddr_or_tap) {
 				if (setsockopt(_f, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one))) goto close_f_fail;
