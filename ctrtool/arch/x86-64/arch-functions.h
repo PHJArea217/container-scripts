@@ -2,6 +2,7 @@ long ctrtool_arch_x86_64_syscall_r(long a, long b, long c, long d, long e, long 
 __attribute__((noreturn)) void ctrtool_arch_x86_64_exit(int status);
 #define CTRTOOL_SYS_pidfd_open 434
 #define CTRTOOL_SYS_close_range 436
+#define CTRTOOL_SYS_openat2 437
 #define CTRTOOL_SYS_pidfd_getfd 438
 #define ctrtool_syscall(nr, a, b, c, d, e, f) ctrtool_arch_x86_64_syscall_r((long) (a), (long) (b), (long) (c), (long) (d), (long) (e), (long) (f), nr)
 #define ctrtool_raw_syscall(nr, a, b, c, d, e, f) ctrtool_arch_x86_64_syscall_r((long) (a), (long) (b), (long) (c), (long) (d), (long) (e), (long) (f), nr)

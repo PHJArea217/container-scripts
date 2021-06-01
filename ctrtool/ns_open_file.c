@@ -21,6 +21,7 @@
 #include <netinet/tcp.h>
 #include <sys/statfs.h>
 #include <linux/magic.h>
+#include <linux/openat2.h>
 #define CTRTOOL_NS_OPEN_FILE_MOUNT 'm'
 #define CTRTOOL_NS_OPEN_FILE_NETWORK_SOCKET 'n'
 #define CTRTOOL_NS_OPEN_FILE_NETWORK_TUNTAP 'T'
@@ -28,6 +29,7 @@
 struct ns_open_file_req {
 	int type;
 	unsigned enter_userns:1;
+	unsigned anon_netns:1;
 	unsigned set_reuseaddr_or_tap:1;
 	unsigned set_reuseport_or_no_pi:1;
 	unsigned set_freebind:1;
@@ -35,8 +37,12 @@ struct ns_open_file_req {
 	unsigned set_defer_accept:1;
 	unsigned set_v6only:2;
 	unsigned set_nodelay:1;
+	unsigned use_openat2:1;
+	unsigned have_open_flags:1;
 	const char *ns_path;
-	int sock_domain;
+	const char *file_path;
+	struct open_how openat2_how;
+	int sock_domain; /* or dir fd for mount namespace */
 	int sock_type;
 	int sock_protocol;
 	int listen_backlog;
@@ -73,11 +79,56 @@ static struct ctrtool_opt_element protocol_values[] = {
 	{.name = "tcp", .value = {.value = IPPROTO_TCP}},
 	{.name = "udp", .value = {.value = IPPROTO_UDP}},
 };
+static struct ctrtool_opt_element dir_values[] = {
+	{.name = "cwd", .value = {.value = AT_FDCWD}}
+};
+static struct ctrtool_opt_element open_values[] = {
+	{.name = "append", .value = {.value = O_APPEND}},
+	{.name = "async", .value = {.value = O_ASYNC}},
+	{.name = "creat", .value = {.value = O_CREAT}},
+	{.name = "create", .value = {.value = O_CREAT}},
+	{.name = "direct", .value = {.value = O_DIRECT}},
+	{.name = "directory", .value = {.value = O_DIRECTORY}},
+	{.name = "dsync", .value = {.value = O_DSYNC}},
+	{.name = "excl", .value = {.value = O_EXCL}},
+	{.name = "noatime", .value = {.value = O_NOATIME}},
+	{.name = "noctty", .value = {.value = O_NOCTTY}},
+	{.name = "nofollow", .value = {.value = O_NOFOLLOW}},
+	{.name = "nonblock", .value = {.value = O_NONBLOCK}},
+	{.name = "path", .value = {.value = O_PATH}},
+	{.name = "rdonly", .value = {.value = O_RDONLY}},
+	{.name = "rdwr", .value = {.value = O_RDWR}},
+	{.name = "sync", .value = {.value = O_SYNC}},
+	{.name = "tmpfile", .value = {.value = O_TMPFILE}},
+	{.name = "trunc", .value = {.value = O_TRUNC}},
+	{.name = "wronly", .value = {.value = O_WRONLY}}
+};
+static struct ctrtool_opt_element resolve_values[] = {
+	{.name = "beneath", .value = {.value = RESOLVE_BENEATH|RESOLVE_NO_MAGICLINKS}},
+	{.name = "beneath_magiclinks", .value = {.value = RESOLVE_BENEATH}},
+	{.name = "in_root", .value = {.value = RESOLVE_IN_ROOT|RESOLVE_NO_MAGICLINKS}},
+	{.name = "in_root_magiclinks", .value = {.value = RESOLVE_IN_ROOT}},
+	{.name = "no_magiclinks", .value = {.value = RESOLVE_NO_MAGICLINKS}},
+	{.name = "no_symlinks", .value = {.value = RESOLVE_NO_SYMLINKS}},
+	{.name = "no_xdev", .value = {.value = RESOLVE_NO_XDEV}}
+};
 static int process_req(struct ns_open_file_req *req_text, int *result_fd, const char *tun_name) {
-	int _f = -1;
+	long _f = -1L;
+	const char *req_file_path = req_text->file_path;
+	if (!req_file_path) {
+		req_file_path = "/";
+	}
+	struct open_how new_open_how = {0};
+	new_open_how.flags = (req_text->use_openat2 || req_text->have_open_flags) ? req_text->openat2_how.flags : (O_RDONLY|O_PATH|O_DIRECTORY);
+	new_open_how.mode = (new_open_how.flags & (O_CREAT|O_TMPFILE)) ? req_text->openat2_how.mode : 0;
+	new_open_how.resolve = req_text->openat2_how.resolve;
 	switch (req_text->type) {
 		case CTRTOOL_NS_OPEN_FILE_MOUNT:
-			_f = ctrtool_syscall(SYS_openat, AT_FDCWD, "/", O_RDONLY|O_PATH|O_DIRECTORY, 0, 0, 0);
+			if (req_text->use_openat2) {
+				_f = ctrtool_syscall(CTRTOOL_SYS_openat2, req_text->sock_domain, req_file_path, &new_open_how, sizeof(new_open_how), 0, 0);
+			} else {
+				_f = ctrtool_syscall(SYS_openat, req_text->sock_domain, req_file_path, new_open_how.flags, new_open_how.mode, 0, 0);
+			}
 			if (_f < 0) {
 				result_fd[0] = -1;
 				result_fd[1] = -_f;
@@ -171,6 +222,7 @@ close_f_fail:
 	close(_f);
 	return -1;
 }
+#define OPTARG_PRESET_V(v) ctrtool_options_parse_arg_int_with_preset(optarg, v, sizeof(v)/sizeof(v[0]), NULL, 0)
 int ctr_scripts_ns_open_file_main(int argc, char **argv) {
 	ctrtool_clear_saved_argv();
 	struct ctrtool_arraylist things_to_add = {0};
@@ -179,7 +231,8 @@ int ctr_scripts_ns_open_file_main(int argc, char **argv) {
 	const char *tun_name = "/dev/net/tun";
 	int opt = 0;
 	uint64_t i_offset = 0;
-	while ((opt = getopt(argc, argv, "+mnTUM:N:d:t:p:l:4:6:z:fo:")) > 0) {
+	const char *valid_modes = "";
+	while ((opt = getopt(argc, argv, "+mnTUM:N:d:t:p:l:4:6:z:fo:A2O:R:P:")) > 0) {
 		char *d_optarg = NULL;
 		switch (opt) {
 			case 'm':
@@ -191,16 +244,33 @@ int ctr_scripts_ns_open_file_main(int argc, char **argv) {
 					return 1;
 				}
 				current->type = opt;
-				current->sock_domain = AF_INET6;
+				current->sock_domain = (opt == 'm') ? AT_FDCWD : AF_INET6;
 				current->sock_type = SOCK_STREAM;
 				current->sock_protocol = 0;
+				current->openat2_how.mode = 0600;
 				break;
 			case 'U':
 				if (!current) goto no_opt;
 				current->enter_userns = 1;
 				break;
 			case 'M':
-				tun_name = optarg;
+				if (!current) goto no_opt;
+				switch (current->type) {
+					case 'T':
+						tun_name = optarg;
+						break;
+					case 'm':
+						if (1) {
+							int c = optarg[0];
+							if ((c >= '0') && (c <= '9')) {
+								current->openat2_how.mode = strtoul(optarg, NULL, 8);
+							} else {
+								fprintf(stderr, "Invalid mode %s\n", optarg);
+								return 1;
+							}
+						}
+						break;
+				}
 				break;
 			case 'N':
 				if (!current) goto no_opt;
@@ -208,7 +278,17 @@ int ctr_scripts_ns_open_file_main(int argc, char **argv) {
 				break;
 			case 'd':
 				if (!current) goto no_opt;
-				current->sock_domain = ctrtool_options_parse_arg_int_with_preset(optarg, domain_values, sizeof(domain_values)/sizeof(domain_values[0]), NULL, 0);
+				switch (current->type) {
+					case 'n':
+						current->sock_domain = ctrtool_options_parse_arg_int_with_preset(optarg, domain_values, sizeof(domain_values)/sizeof(domain_values[0]), NULL, 0);
+						break;
+					case 'm':
+						current->sock_domain = ctrtool_options_parse_arg_int_with_preset(optarg, dir_values, sizeof(dir_values)/sizeof(dir_values[0]), NULL, 0);
+						break;
+					default:
+						fprintf(stderr, "-d may only be used with -m or -n\n");
+						return 1;
+				}
 				break;
 			case 't':
 				if (!current) goto no_opt;
@@ -221,6 +301,15 @@ int ctr_scripts_ns_open_file_main(int argc, char **argv) {
 			case 'l':
 				if (!current) goto no_opt;
 				current->listen_backlog = atoi(optarg);
+				break;
+			case 'A':
+				if (!current) goto no_opt;
+				if (current->type == 'n') {
+					current->anon_netns = 1;
+				} else {
+					fprintf(stderr, "-A may only be used with -n\n");
+					return 1;
+				}
 				break;
 			case '4':
 			case '6':
@@ -314,6 +403,51 @@ int ctr_scripts_ns_open_file_main(int argc, char **argv) {
 			case 'o':
 				i_offset = strtoull(optarg, NULL, 0);
 				break;
+			case 'O':
+				switch (current->type) {
+					case 'm':
+						current->openat2_how.flags |= OPTARG_PRESET_V(open_values);
+						current->have_open_flags = 1;
+						break;
+					default:
+						valid_modes = "-m";
+						goto invalid_mode;
+				}
+				break;
+			case 'R':
+				switch (current->type) {
+					case 'm':
+						current->openat2_how.resolve |= OPTARG_PRESET_V(resolve_values);
+						current->have_open_flags = 1;
+						current->use_openat2 = 1;
+						break;
+					default:
+						valid_modes = "-m";
+						goto invalid_mode;
+				}
+				break;
+			case '2':
+				switch (current->type) {
+					case 'm':
+						current->have_open_flags = 1;
+						current->use_openat2 = 1;
+						break;
+					default:
+						valid_modes = "-m";
+						goto invalid_mode;
+				}
+				break;
+			case 'P':
+				switch (current->type) {
+					case 'm':
+						current->file_path = optarg;
+						current->have_open_flags = 1;
+						break;
+					default:
+						valid_modes = "-m";
+						goto invalid_mode;
+				}
+				break;
 			default:
 				return 1;
 		}
@@ -321,6 +455,9 @@ int ctr_scripts_ns_open_file_main(int argc, char **argv) {
 no_opt:
 		fprintf(stderr, "-%c may not be used before -m, -n, -T, or -f\n", opt);
 no_mem:
+		return 1;
+invalid_mode:
+		fprintf(stderr, "-%c may only be used with %s\n", opt, valid_modes);
 		return 1;
 already_address:
 		fprintf(stderr, "-%c already has an address\n", opt);
@@ -341,7 +478,7 @@ no_addr_part:
 	for (size_t i = 0; i < things_to_add.nr; i++) {
 		current = &list_base[i];
 		int out_fd = -1;
-		if (current->ns_path) {
+		if (current->ns_path || current->anon_netns) {
 			if (current->type == 'f') {
 				out_fd = open(current->ns_path, O_RDONLY|O_NOCTTY);
 				if (out_fd < 0) {
@@ -356,19 +493,22 @@ no_addr_part:
 				return 2;
 			}
 			shared_mem_region[0] = -1;
-			int ns_fd = open(current->ns_path, O_RDONLY|O_NONBLOCK|O_NOCTTY|O_CLOEXEC);
-			if (ns_fd < 0) {
-				perror("open namespace");
-				return 2;
-			}
-			struct statfs ns_fd_fs = {0};
-			if (fstatfs(ns_fd, &ns_fd_fs)) {
-				perror("statfs");
-				return 2;
-			}
-			if (ns_fd_fs.f_type != NSFS_MAGIC) {
-				fprintf(stderr, "Namespace file %s is not NSFS_MAGIC\n", current->ns_path);
-				return 2;
+			int ns_fd = -1;
+			if (current->ns_path) {
+				ns_fd = open(current->ns_path, O_RDONLY|O_NONBLOCK|O_NOCTTY|O_CLOEXEC);
+				if (ns_fd < 0) {
+					perror("open namespace");
+					return 2;
+				}
+				struct statfs ns_fd_fs = {0};
+				if (fstatfs(ns_fd, &ns_fd_fs)) {
+					perror("statfs");
+					return 2;
+				}
+				if (ns_fd_fs.f_type != NSFS_MAGIC) {
+					fprintf(stderr, "Namespace file %s is not NSFS_MAGIC\n", current->ns_path);
+					return 2;
+				}
 			}
 			long child_pid = ctrtool_clone_onearg(CLONE_FILES|SIGCHLD);
 			if (child_pid < 0) {
@@ -377,33 +517,55 @@ no_addr_part:
 				return 2;
 			}
 			if (child_pid == 0) {
-				if (current->enter_userns) {
-					if (prctl(PR_SET_DUMPABLE, 0, 0, 0, 0)) {
-						shared_mem_region[0] = -1;
-						shared_mem_region[1] = errno;
-						__sync_synchronize();
-						shared_mem_region[2] = 1;
-						ctrtool_exit(255);
-					}
-					int userns_fd = ioctl(ns_fd, NS_GET_USERNS, 0);
-					if (userns_fd < 0) {
-						shared_mem_region[0] = -1;
-						shared_mem_region[1] = errno;
-						__sync_synchronize();
-						shared_mem_region[2] = 1;
-						ctrtool_exit(3);
-					}
-					if (setns(userns_fd, CLONE_NEWUSER)) {
-						shared_mem_region[0] = -1;
-						shared_mem_region[1] = errno;
-						__sync_synchronize();
-						shared_mem_region[2] = 1;
+				if (current->ns_path) {
+					if (current->enter_userns ^ current->anon_netns) { /* -A or -U, but not neither or -AU */
+						if (prctl(PR_SET_DUMPABLE, 0, 0, 0, 0)) {
+							shared_mem_region[0] = -1;
+							shared_mem_region[1] = errno;
+							__sync_synchronize();
+							shared_mem_region[2] = 1;
+							ctrtool_exit(255);
+						}
+						int userns_fd = ioctl(ns_fd, NS_GET_USERNS, 0);
+						if (userns_fd < 0) {
+							shared_mem_region[0] = -1;
+							shared_mem_region[1] = errno;
+							__sync_synchronize();
+							shared_mem_region[2] = 1;
+							ctrtool_exit(3);
+						}
+						if (setns(userns_fd, CLONE_NEWUSER)) {
+							shared_mem_region[0] = -1;
+							shared_mem_region[1] = errno;
+							__sync_synchronize();
+							shared_mem_region[2] = 1;
+							close(userns_fd);
+							ctrtool_exit(4);
+						}
 						close(userns_fd);
-						ctrtool_exit(4);
+					} else if (current->anon_netns && current->enter_userns) {
+						if (prctl(PR_SET_DUMPABLE, 0, 0, 0, 0)) {
+							shared_mem_region[0] = -1;
+							shared_mem_region[1] = errno;
+							__sync_synchronize();
+							shared_mem_region[2] = 1;
+							ctrtool_exit(255);
+						}
+						if (setns(ns_fd, CLONE_NEWUSER)) {
+							shared_mem_region[0] = -1;
+							shared_mem_region[1] = errno;
+							__sync_synchronize();
+							shared_mem_region[2] = 1;
+							ctrtool_exit(4);
+						}
 					}
-					close(userns_fd);
 				}
-				long syscall_result = ctrtool_syscall(SYS_setns, ns_fd, ((current->type == CTRTOOL_NS_OPEN_FILE_MOUNT) ? CLONE_NEWNS : CLONE_NEWNET), 0, 0, 0, 0);
+				long syscall_result;
+				if (current->anon_netns) {
+					syscall_result = ctrtool_syscall(SYS_unshare, CLONE_NEWNET, 0, 0, 0, 0, 0);
+				} else {
+					syscall_result = ctrtool_syscall(SYS_setns, ns_fd, ((current->type == CTRTOOL_NS_OPEN_FILE_MOUNT) ? CLONE_NEWNS : CLONE_NEWNET), 0, 0, 0, 0);
+				}
 				if (syscall_result < 0) {
 					shared_mem_region[0] = -1;
 					shared_mem_region[1] = -syscall_result;
@@ -432,7 +594,7 @@ no_addr_part:
 								out_fd = shared_mem_region[0];
 								break;
 							case 1:
-								perror("Failed to open root directory");
+								fprintf(stderr, "Failed to open %s in mount namespace: %s\n", current->file_path ? current->file_path : "root directory", strerror(errno));
 								return 2;
 							case 2:
 								perror("Failed to create socket");
@@ -467,6 +629,7 @@ no_addr_part:
 		} else {
 			int mem_record[2] = {-1, 1};
 			if (process_req(current, mem_record, tun_name)) {
+				errno = mem_record[1];
 				perror("Failed to create file descriptor");
 				return 2;
 			}
