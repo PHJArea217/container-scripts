@@ -418,6 +418,7 @@ int ctr_scripts_container_launcher_main(int argc, char **argv) {
 	int deny_setgroups = 0;
 	int do_pidfd = 0;
 	int errno_ptr = 0;
+	int no_exec = 0;
 	size_t current_nsenter_point = 0;
 	size_t current_nsenter2_point = 0;
 	size_t current_nsenter_post_point = 0;
@@ -467,6 +468,7 @@ int ctr_scripts_container_launcher_main(int argc, char **argv) {
 		{"net", no_argument, NULL, 'n'},
 		{"nsenter2", required_argument, NULL, 70025},
 		{"nsenter-post", required_argument, NULL, 70010},
+		{"no-exec", no_argument, NULL, 70028},
 		{"no-clear-groups", no_argument, NULL, 'g'},
 		{"no-new-privs", no_argument, NULL, 'D'},
 		{"no-set-id", no_argument, NULL, 'N'},
@@ -908,6 +910,9 @@ invalid_propagation:
 					return 1;
 				}
 				break;
+			case 70028:
+				no_exec = 1;
+				break;
 			case 70100:
 				free(data_to_process.supp_groups.iov_base);
 				data_to_process.supp_groups.iov_base = NULL;
@@ -994,7 +999,7 @@ invalid_propagation:
 		mount_propagation = (clone_flags & CLONE_NEWNS) ? MS_SLAVE : 0;
 	}
 	if (signal(SIGCHLD, SIG_DFL) == SIG_ERR) return 1;
-	if (!argv[optind]) {
+	if ((!no_exec) && (!argv[optind])) {
 		fprintf(stderr, "%s: No program specified\n", argv[0]);
 		return 1;
 	}
@@ -1108,6 +1113,9 @@ invalid_propagation:
 			if (errno_ptr) errno = errno_ptr;
 			perror(r);
 			exit(1);
+		}
+		if (no_exec) {
+			ctrtool_exit(0);
 		}
 		errno_ptr = 0;
 		if (data_to_process.exec_fd >= 0) {
@@ -1265,6 +1273,9 @@ invalid_propagation:
 			if (errno_ptr) errno = errno_ptr;
 			perror(r);
 			ctrtool_exit(1);
+		}
+		if (no_exec) {
+			ctrtool_exit(0);
 		}
 		errno_ptr = 0;
 		if (data_to_process.exec_fd >= 0) {
