@@ -1447,22 +1447,23 @@ no_emptyfile:;
 		if (!script_file) {
 			return 0;
 		}
-		if (tty_proxy_object.ultimate_stdin_dest >= 0)
-			if (ctrtool_export_fd(tty_proxy_object.ultimate_stdin_dest, "CTRTOOL_CONTAINER_LAUNCHER_CHILD_STDIN_FD")) {
-				perror("ctrtool_export_fd");
-				return 1;
-			}
-		if (tty_proxy_object.ultimate_stdout_src >= 0)
-			if (ctrtool_export_fd(tty_proxy_object.ultimate_stdout_src, "CTRTOOL_CONTAINER_LAUNCHER_CHILD_STDOUT_FD")) {
-				perror("ctrtool_export_fd");
-				return 1;
-			}
-		if (tty_proxy_object.ultimate_stderr_src >= 0)
-			if (ctrtool_export_fd(tty_proxy_object.ultimate_stderr_src, "CTRTOOL_CONTAINER_LAUNCHER_CHILD_STDERR_FD")) {
-				perror("ctrtool_export_fd");
-				return 1;
-			}
-
+		if (alloc_tty) {
+			if (tty_proxy_object.ultimate_stdin_dest >= 0)
+				if (ctrtool_export_fd(tty_proxy_object.ultimate_stdin_dest, "CTRTOOL_CONTAINER_LAUNCHER_CHILD_STDIN_FD")) {
+					perror("ctrtool_export_fd");
+					return 1;
+				}
+			if (tty_proxy_object.ultimate_stdout_src >= 0)
+				if (ctrtool_export_fd(tty_proxy_object.ultimate_stdout_src, "CTRTOOL_CONTAINER_LAUNCHER_CHILD_STDOUT_FD")) {
+					perror("ctrtool_export_fd");
+					return 1;
+				}
+			if (tty_proxy_object.ultimate_stderr_src >= 0)
+				if (ctrtool_export_fd(tty_proxy_object.ultimate_stderr_src, "CTRTOOL_CONTAINER_LAUNCHER_CHILD_STDERR_FD")) {
+					perror("ctrtool_export_fd");
+					return 1;
+				}
+		}
 		if (lockfile_fd != -1) {
 			int fl = fcntl(lockfile_fd, F_GETFD);
 			if (fl < 0) return 1;
