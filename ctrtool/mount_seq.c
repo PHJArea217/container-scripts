@@ -21,6 +21,7 @@ struct mount_seq {
 	unsigned keep_going_if_fail:1;
 	unsigned sync_after_operation:1;
 	unsigned skip_target_symlink_check:1;
+	unsigned exclusive_file:1;
 	union {
 		struct {
 			unsigned int flags;
@@ -244,14 +245,14 @@ static int process_cmd(struct mount_seq *s) {
 			}
 			if (s->opts.mount_opts.mkdir_if_not_exist) {
 				if (mkdir(s->target, 0700)) {
-					if (errno != EEXIST) {
+					if (s->exclusive_file || (errno != EEXIST)) {
 						fprintf(stderr, "mkdir %s: %s\n", s->target, strerror(errno));
 						return 1;
 					}
 				}
 			} else if (s->opts.mount_opts.make_file_if_not_exist) {
 				if (mknod(s->target, S_IFSOCK|0600, 0)) {
-					if (errno != EEXIST) {
+					if (s->exclusive_file || (errno != EEXIST)) {
 						fprintf(stderr, "mknod %s: %s\n", s->target, strerror(errno));
 						return 1;
 					}
@@ -338,7 +339,7 @@ int ctr_scripts_mount_seq_main(int argc, char **argv) {
 	int opt = 0;
 	const char *error_str = NULL;
 	char i_opt = 0;
-	while ((opt = getopt(argc, argv, "m:D:u:S:c:l:kKeyEM:s:t:O:F:o:f")) > 0) {
+	while ((opt = getopt(argc, argv, "m:D:u:S:c:l:kKeyEM:s:t:O:F:o:fx")) > 0) {
 		switch(opt) {
 			case 'm':
 			case 'D':
@@ -489,6 +490,19 @@ int ctr_scripts_mount_seq_main(int argc, char **argv) {
 						break;
 					default:
 						error_str = "-o may only be used with -m";
+						goto fail_all;
+				}
+				break;
+			case 'x':
+				if (!current) {
+					goto fail_no_global;
+				}
+				switch (current->cmd) {
+					case 'm':
+						current->exclusive_file = 1;
+						break;
+					default:
+						error_str = "-x may only be used with -m";
 						goto fail_all;
 				}
 				break;
