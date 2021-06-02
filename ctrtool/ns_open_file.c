@@ -471,10 +471,14 @@ int ctr_scripts_ns_open_file_main(int argc, char **argv) {
 						break;
 					case 'n':
 						if (current->bind_address) goto already_address;
+						size_t unix_path_len = strnlen(optarg, sizeof(((struct sockaddr_un *) 0)->sun_path)+1);
+						if (unix_path_len > sizeof(((struct sockaddr_un *) 0)->sun_path)) {
+							fprintf(stderr, "Unix domain socket path too long\n");
+							return 1;
+						}
 						struct sockaddr_un *unix_path = calloc(sizeof(struct sockaddr_un), 1);
 						if (!unix_path) goto no_mem;
 						unix_path->sun_family = AF_UNIX;
-						size_t unix_path_len = strnlen(optarg, sizeof(unix_path->sun_path));
 						memcpy(unix_path->sun_path, optarg, unix_path_len);
 						if (unix_path->sun_path[0] == '@') unix_path->sun_path[0] = '\0';
 						current->bind_address = (struct sockaddr *) unix_path;
