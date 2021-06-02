@@ -568,7 +568,9 @@ int ctr_scripts_ns_open_file_main(int argc, char **argv) {
 								}
 								arg_part++;
 							}
-							current->ns_path = "";
+							if (!current->register_is_dirfd) {
+								current->ns_path = "";
+							}
 							break;
 					}
 				}
