@@ -638,9 +638,6 @@ int ctrtool_read_fd_env_spec(const char *arg, int print_msg, int *result) {
 				fprintf(stderr, "Invalid numeric specification %s\n", arg);
 			return -12;
 	}
-	if (do_unsetenv) {
-		ctrtool_assert(unsetenv(&arg[1]) == 0);
-	}
 	unsigned long i_result = strtoul(number, NULL, 0);
 	if (i_result > INT_MAX) {
 		if (print_msg)
@@ -648,6 +645,22 @@ int ctrtool_read_fd_env_spec(const char *arg, int print_msg, int *result) {
 		return -13;
 	}
 	int i_result_i = i_result;
+	if (do_unsetenv) {
+		if (ctrtool_make_fd_cloexec(i_result_i, 1)) {
+			if (print_msg) {
+				perror("ctrtool_make_fd_cloexec");
+			}
+			return -14;
+		}
+		ctrtool_assert(unsetenv(&arg[1]) == 0);
+	} else {
+		if (ctrtool_make_fd_cloexec(i_result_i, 0)) {
+			if (print_msg) {
+				perror("ctrtool_make_fd_cloexec");
+			}
+			return -14;
+		}
+	}
 	*result = i_result_i;
 	return 0;
 }
