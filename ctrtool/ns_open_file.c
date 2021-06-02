@@ -645,6 +645,7 @@ no_addr_part:
 				return 2;
 			}
 			if (child_pid == 0) {
+				int dumpable_set = 0;
 				if (current->ns_path) {
 					if (current->enter_userns ^ current->anon_netns) { /* -A or -U, but not neither or -AU */
 						if (prctl(PR_SET_DUMPABLE, 0, 0, 0, 0)) {
@@ -654,6 +655,7 @@ no_addr_part:
 							shared_mem_region[2] = 1;
 							ctrtool_exit(255);
 						}
+						dumpable_set = 1;
 						int userns_fd = ioctl(ns_fd, NS_GET_USERNS, 0);
 						if (userns_fd < 0) {
 							shared_mem_region[0] = -1;
@@ -679,6 +681,7 @@ no_addr_part:
 							shared_mem_region[2] = 1;
 							ctrtool_exit(255);
 						}
+						dumpable_set = 1;
 						if (setns(ns_fd, CLONE_NEWUSER)) {
 							shared_mem_region[0] = -1;
 							shared_mem_region[1] = errno;
@@ -686,6 +689,15 @@ no_addr_part:
 							shared_mem_region[2] = 1;
 							ctrtool_exit(4);
 						}
+					}
+				}
+				if ((!dumpable_set) && (current->type == CTRTOOL_NS_OPEN_FILE_MOUNT)) {
+					if (prctl(PR_SET_DUMPABLE, 0, 0, 0, 0)) {
+						shared_mem_region[0] = -1;
+						shared_mem_region[1] = errno;
+						__sync_synchronize();
+						shared_mem_region[2] = 1;
+						ctrtool_exit(255);
 					}
 				}
 				long syscall_result;
