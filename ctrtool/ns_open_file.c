@@ -129,6 +129,9 @@ static int process_req(struct ns_open_file_req *req_text, int *result_fd, const 
 	}
 	struct open_how new_open_how = {0};
 	new_open_how.flags = (req_text->use_openat2 || req_text->have_open_flags) ? req_text->openat2_how.flags : (O_RDONLY|O_PATH|O_DIRECTORY);
+#ifdef O_LARGEFILE
+	new_open_how.flags |= O_LARGEFILE;
+#endif
 	new_open_how.mode = (new_open_how.flags & (O_CREAT|O_TMPFILE)) ? req_text->openat2_how.mode : 0;
 	new_open_how.resolve = req_text->openat2_how.resolve;
 	int x_dir_fd = req_text->sock_domain;
