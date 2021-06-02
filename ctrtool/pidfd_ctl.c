@@ -62,10 +62,14 @@ int ctr_scripts_pidfd_ctl_main(int argc, char **argv) {
 				}
 				break;
 			case '1':
-				reg_1 = atoi(optarg);
+				if (ctrtool_read_fd_env_spec(optarg, 1, &reg_1)) {
+					return 255;
+				}
 				break;
 			case '2':
-				reg_2 = atoi(optarg);
+				if (ctrtool_read_fd_env_spec(optarg, 1, &reg_2)) {
+					return 255;
+				}
 				break;
 			case 'e':
 				if (ctrtool_arraylist_expand(&fds_to_export, &reg_1, 10)) {
