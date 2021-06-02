@@ -39,6 +39,10 @@ struct ns_open_file_req {
 	unsigned set_nodelay:1;
 	unsigned use_openat2:1;
 	unsigned have_open_flags:1;
+	unsigned ns_path_is_register:1;
+	unsigned store_result_in_register:1;
+	unsigned inhibit_setenv:1;
+	unsigned register_is_dirfd:1;
 	const char *ns_path;
 	const char *file_path;
 	struct open_how openat2_how;
@@ -46,6 +50,8 @@ struct ns_open_file_req {
 	int sock_type;
 	int sock_protocol;
 	int listen_backlog;
+	int ns_path_register;
+	int fd_result_register;
 	struct sockaddr *bind_address;
 	socklen_t bind_address_len;
 	char *scope_id_name;
@@ -112,7 +118,8 @@ static struct ctrtool_opt_element resolve_values[] = {
 	{.name = "no_symlinks", .value = {.value = RESOLVE_NO_SYMLINKS}},
 	{.name = "no_xdev", .value = {.value = RESOLVE_NO_XDEV}}
 };
-static int process_req(struct ns_open_file_req *req_text, int *result_fd, const char *tun_name) {
+#define NR_REGS 8
+static int process_req(struct ns_open_file_req *req_text, int *result_fd, const char *tun_name, const int *register_list) {
 	long _f = -1L;
 	const char *req_file_path = req_text->file_path;
 	if (!req_file_path) {
@@ -122,12 +129,22 @@ static int process_req(struct ns_open_file_req *req_text, int *result_fd, const 
 	new_open_how.flags = (req_text->use_openat2 || req_text->have_open_flags) ? req_text->openat2_how.flags : (O_RDONLY|O_PATH|O_DIRECTORY);
 	new_open_how.mode = (new_open_how.flags & (O_CREAT|O_TMPFILE)) ? req_text->openat2_how.mode : 0;
 	new_open_how.resolve = req_text->openat2_how.resolve;
+	int x_dir_fd = req_text->sock_domain;
+	if (req_text->ns_path_is_register && req_text->register_is_dirfd) {
+		int reg_num = req_text->ns_path_register;
+		if ((reg_num < 0) || (reg_num >= NR_REGS)) {
+			result_fd[0] = -1;
+			result_fd[1] = ERANGE;
+			return 1;
+		}
+		x_dir_fd = register_list[reg_num];
+	}
 	switch (req_text->type) {
 		case CTRTOOL_NS_OPEN_FILE_MOUNT:
 			if (req_text->use_openat2) {
-				_f = ctrtool_syscall(CTRTOOL_SYS_openat2, req_text->sock_domain, req_file_path, &new_open_how, sizeof(new_open_how), 0, 0);
+				_f = ctrtool_syscall(CTRTOOL_SYS_openat2, x_dir_fd, req_file_path, &new_open_how, sizeof(new_open_how), 0, 0);
 			} else {
-				_f = ctrtool_syscall(SYS_openat, req_text->sock_domain, req_file_path, new_open_how.flags, new_open_how.mode, 0, 0);
+				_f = ctrtool_syscall(SYS_openat, x_dir_fd, req_file_path, new_open_how.flags, new_open_how.mode, 0, 0);
 			}
 			if (_f < 0) {
 				result_fd[0] = -1;
@@ -232,7 +249,10 @@ int ctr_scripts_ns_open_file_main(int argc, char **argv) {
 	int opt = 0;
 	uint64_t i_offset = 0;
 	const char *valid_modes = "";
-	while ((opt = getopt(argc, argv, "+mnTUM:N:d:t:p:l:4:6:z:fo:A2O:R:P:")) > 0) {
+	int *register_list = malloc(sizeof(int) * NR_REGS);
+	ctrtool_assert(register_list);
+	memset(register_list, 255, sizeof(int) * NR_REGS);
+	while ((opt = getopt(argc, argv, "+mnTUM:N:d:t:p:l:4:6:z:fo:A2O:R:P:L:s:i:")) > 0) {
 		char *d_optarg = NULL;
 		switch (opt) {
 			case 'm':
@@ -404,6 +424,7 @@ int ctr_scripts_ns_open_file_main(int argc, char **argv) {
 				i_offset = strtoull(optarg, NULL, 0);
 				break;
 			case 'O':
+				if (!current) goto no_opt;
 				switch (current->type) {
 					case 'm':
 						current->openat2_how.flags |= OPTARG_PRESET_V(open_values);
@@ -415,6 +436,7 @@ int ctr_scripts_ns_open_file_main(int argc, char **argv) {
 				}
 				break;
 			case 'R':
+				if (!current) goto no_opt;
 				switch (current->type) {
 					case 'm':
 						current->openat2_how.resolve |= OPTARG_PRESET_V(resolve_values);
@@ -427,6 +449,7 @@ int ctr_scripts_ns_open_file_main(int argc, char **argv) {
 				}
 				break;
 			case '2':
+				if (!current) goto no_opt;
 				switch (current->type) {
 					case 'm':
 						current->have_open_flags = 1;
@@ -438,6 +461,7 @@ int ctr_scripts_ns_open_file_main(int argc, char **argv) {
 				}
 				break;
 			case 'P':
+				if (!current) goto no_opt;
 				switch (current->type) {
 					case 'm':
 						current->file_path = optarg;
@@ -446,6 +470,87 @@ int ctr_scripts_ns_open_file_main(int argc, char **argv) {
 					default:
 						valid_modes = "-m";
 						goto invalid_mode;
+				}
+				break;
+			case 'L':
+			case 's':
+			case 'i':
+				if ((opt == 'L') && current) {
+					fprintf(stderr, "-L must be before -m, -n, -T, and -f\n");
+					return 1;
+				}
+				if ((opt == 'i') && !current) goto no_opt;
+				if ((opt == 's') && !current) goto no_opt;
+				if (1) {
+					d_optarg = ctrtool_strdup(optarg);
+					char *reg_part_b = strchr(d_optarg, ',');
+					if (!reg_part_b) {
+						if (opt == 'L') {
+							fprintf(stderr, "Missing specification for register load\n");
+							return 1;
+						}
+					} else {
+						reg_part_b[0] = 0;
+					}
+					int reg_num = atoi(d_optarg);
+					if ((reg_num < 0) || (reg_num >= NR_REGS)) {
+						fprintf(stderr, "Invalid register %d\n", reg_num);
+						return 1;
+					}
+					char *arg_part = reg_part_b ? &reg_part_b[1] : "";
+					switch (opt) {
+						case 'L':
+							/* "Load" the register with the specified value. */
+							if (ctrtool_read_fd_env_spec(arg_part, 1, &register_list[reg_num])) {
+								return 1;
+							}
+							break;
+						case 's':
+							if (current->store_result_in_register) {
+								fprintf(stderr, "Multiple use of -s not allowed\n");
+								return 1;
+							}
+							current->store_result_in_register = 1;
+							current->fd_result_register = reg_num;
+							/* 'i' flag inhibits setting the CTRTOOL_NS_OPEN_FILE_FD_n variable */
+							while (*arg_part) {
+								switch (*arg_part) {
+									case 'i':
+										current->inhibit_setenv = 1;
+										break;
+									default:
+										fprintf(stderr, "Invalid flag '%c' for -s\n", *arg_part);
+										return 1;
+								}
+								arg_part++;
+							}
+							break;
+						case 'i':
+							if (current->ns_path_is_register) {
+								fprintf(stderr, "Multiple use of -i not allowed\n");
+								return 1;
+							}
+							current->ns_path_is_register = 1;
+							current->ns_path_register = reg_num;
+							/* 'd' to specify that it's a directory descriptor for openat(). */
+							/* 'n' to specify that it's a namespace (default) */
+							while (*arg_part) {
+								switch (*arg_part) {
+									case 'd':
+										current->register_is_dirfd = 1;
+										break;
+									case 'n':
+										current->register_is_dirfd = 0;
+										break;
+									default:
+										fprintf(stderr, "Invalid flag '%c' for -i\n", *arg_part);
+										return 1;
+								}
+								arg_part++;
+							}
+							current->ns_path = "";
+							break;
+					}
 				}
 				break;
 			default:
@@ -495,7 +600,13 @@ no_addr_part:
 			shared_mem_region[0] = -1;
 			int ns_fd = -1;
 			if (current->ns_path) {
-				ns_fd = open(current->ns_path, O_RDONLY|O_NONBLOCK|O_NOCTTY|O_CLOEXEC);
+				if (current->ns_path_is_register && !current->register_is_dirfd) {
+					int r = current->ns_path_register;
+					ctrtool_assert((r >= 0) && (r < NR_REGS));
+					ns_fd = fcntl(register_list[r], F_DUPFD_CLOEXEC, 3);
+				} else {
+					ns_fd = open(current->ns_path, O_RDONLY|O_NONBLOCK|O_NOCTTY|O_CLOEXEC);
+				}
 				if (ns_fd < 0) {
 					perror("open namespace");
 					return 2;
@@ -573,7 +684,7 @@ no_addr_part:
 					shared_mem_region[2] = 1;
 					ctrtool_exit(5);
 				}
-				syscall_result = process_req(current, shared_mem_region, tun_name);
+				syscall_result = process_req(current, shared_mem_region, tun_name, register_list);
 				__sync_synchronize();
 				shared_mem_region[2] = 1;
 				ctrtool_exit(syscall_result);
@@ -628,7 +739,7 @@ no_addr_part:
 			close(ns_fd);
 		} else {
 			int mem_record[2] = {-1, 1};
-			if (process_req(current, mem_record, tun_name)) {
+			if (process_req(current, mem_record, tun_name, register_list)) {
 				errno = mem_record[1];
 				perror("Failed to create file descriptor");
 				return 2;
@@ -641,9 +752,16 @@ end_f:
 			perror("fcntl");
 			return 2;
 		}
-		if (fcntl(out_fd, F_SETFD, (fcntl_flags & ~FD_CLOEXEC))) {
-			perror("fcntl");
-			return 2;
+		if (current->inhibit_setenv) {
+			if (fcntl(out_fd, F_SETFD, (fcntl_flags | FD_CLOEXEC))) {
+				perror("fcntl");
+				return 2;
+			}
+		} else {
+			if (fcntl(out_fd, F_SETFD, (fcntl_flags & ~FD_CLOEXEC))) {
+				perror("fcntl");
+				return 2;
+			}
 		}
 		char env_var_name[60] = {0};
 		char env_var_value[15] = {0};
@@ -651,13 +769,18 @@ end_f:
 			perror("snprintf");
 			return 2;
 		}
-		if (snprintf(env_var_value, sizeof(env_var_value), "%d", out_fd) <= 0) {
+		if (snprintf(env_var_value, sizeof(env_var_value), "%d", current->inhibit_setenv ? -1 : out_fd) <= 0) {
 			perror("snprintf");
 			return 2;
 		}
 		if (setenv(env_var_name, env_var_value, 1)) {
 			perror("setenv");
 			return 2;
+		}
+		if (current->store_result_in_register) {
+			int reg_num = current->fd_result_register;
+			ctrtool_assert((reg_num >= 0) && (reg_num < NR_REGS));
+			register_list[reg_num] = out_fd;
 		}
 	}
 	execvp(argv[optind], &argv[optind]);

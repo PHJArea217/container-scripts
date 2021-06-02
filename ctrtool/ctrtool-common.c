@@ -599,3 +599,55 @@ int ctrtool_export_fd(int fd, const char *env_name) {
 	}
 	return 0;
 }
+int ctrtool_read_fd_env_spec(const char *arg, int print_msg, int *result) {
+	const char *number = arg;
+	int do_unsetenv = 0;
+	switch (arg[0]) {
+		case ':':
+			do_unsetenv = 1;
+		case '/':
+			if (1) {
+				const char *env_var_value = getenv(&arg[1]);
+				if (!env_var_value) {
+					if (print_msg)
+						fprintf(stderr, "$%s is not defined\n", &arg[1]);
+					return -10;
+				}
+				if ((env_var_value[0] >= '0') && (env_var_value[0] <= '9')) {
+					number = env_var_value;
+				} else {
+					if (print_msg)
+						fprintf(stderr, "$%s is not a number\n", &arg[1]);
+					return -11;
+				}
+			}
+			break;
+		case '0':
+		case '1':
+		case '2':
+		case '3':
+		case '4':
+		case '5':
+		case '6':
+		case '7':
+		case '8':
+		case '9':
+			break;
+		default:
+			if (print_msg)
+				fprintf(stderr, "Invalid numeric specification %s\n", arg);
+			return -12;
+	}
+	if (do_unsetenv) {
+		ctrtool_assert(unsetenv(&arg[1]) == 0);
+	}
+	unsigned long i_result = strtoul(number, NULL, 0);
+	if (i_result > INT_MAX) {
+		if (print_msg)
+			fprintf(stderr, "Value %lu out of range\n", i_result);
+		return -13;
+	}
+	int i_result_i = i_result;
+	*result = i_result_i;
+	return 0;
+}
