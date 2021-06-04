@@ -25,10 +25,14 @@ int ctr_scripts_simple_renameat2_main(int argc, char **argv) {
 				rename_flags |= RENAME_NOREPLACE;
 				break;
 			case 's':
-				source_fd = atoi(optarg);
+				if (ctrtool_read_fd_env_spec(optarg, 1, &source_fd)) {
+					return 2;
+				}
 				break;
 			case 'd':
-				target_fd = atoi(optarg);
+				if (ctrtool_read_fd_env_spec(optarg, 1, &target_fd)) {
+					return 2;
+				}
 				break;
 			default:
 				fprintf(stderr, "Usage: %s [-xwn] [-s source_fd] [-d target_fd] source_file target_file\n", argv[0]);

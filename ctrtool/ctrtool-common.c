@@ -646,7 +646,7 @@ int ctrtool_read_fd_env_spec(const char *arg, int print_msg, int *result) {
 	}
 	int i_result_i = i_result;
 	if (do_unsetenv) {
-		if (ctrtool_make_fd_cloexec(i_result_i, 1)) {
+		if (ctrtool_make_fd_cloexec(i_result_i, !(i_result_i < 3))) {
 			if (print_msg) {
 				perror("ctrtool_make_fd_cloexec");
 			}
