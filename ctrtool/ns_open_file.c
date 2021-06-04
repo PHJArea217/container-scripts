@@ -308,7 +308,17 @@ int ctr_scripts_ns_open_file_main(int argc, char **argv) {
 						current->sock_domain = ctrtool_options_parse_arg_int_with_preset(optarg, domain_values, sizeof(domain_values)/sizeof(domain_values[0]), NULL, 0);
 						break;
 					case 'm':
-						current->sock_domain = ctrtool_options_parse_arg_int_with_preset(optarg, dir_values, sizeof(dir_values)/sizeof(dir_values[0]), NULL, 0);
+						switch(optarg[0]) {
+							case ':':
+							case '/':
+								if (ctrtool_read_fd_env_spec(optarg, 1, &current->sock_domain)) {
+									return 1;
+								}
+								break;
+							default:
+								current->sock_domain = ctrtool_options_parse_arg_int_with_preset(optarg, dir_values, sizeof(dir_values)/sizeof(dir_values[0]), NULL, 0);
+								break;
+						}
 						break;
 					default:
 						fprintf(stderr, "-d may only be used with -m or -n\n");
