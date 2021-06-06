@@ -21,7 +21,20 @@
 #include <netinet/tcp.h>
 #include <sys/statfs.h>
 #include <linux/magic.h>
+#ifdef CTRTOOL_CONFIG_HAVE_LINUX_OPENAT2
 #include <linux/openat2.h>
+#else
+struct open_how {
+	uint64_t flags;
+	uint64_t mode;
+	uint64_t resolve;
+};
+#define RESOLVE_NO_XDEV 1
+#define RESOLVE_NO_MAGICLINKS 2
+#define RESOLVE_NO_SYMLINKS 4
+#define RESOLVE_BENEATH 8
+#define RESOLVE_IN_ROOT 16
+#endif
 #include <sys/un.h>
 #include <stddef.h>
 #define CTRTOOL_NS_OPEN_FILE_MOUNT 'm'
