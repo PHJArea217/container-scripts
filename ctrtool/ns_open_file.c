@@ -218,10 +218,17 @@ static int process_req(struct ns_open_file_req *req_text, int *result_fd, const 
 				if (setsockopt(_f, SOL_TCP, TCP_NODELAY, &one, sizeof(one))) goto close_f_fail;
 			}
 			if (req_text->bind_address) {
-				if (req_text->bind_address_len == sizeof(struct sockaddr_in6)) {
+				if ((req_text->bind_address_len == sizeof(struct sockaddr_in6)) && (req_text->bind_address->sa_family == AF_INET6)) {
 					if (req_text->scope_id_name) {
+#ifdef CTRTOOL_USE_IF_NAMETOINDEX
 						unsigned int scope_index = if_nametoindex(req_text->scope_id_name);
 						if (!scope_index) goto close_f_fail;
+#else
+						struct ifreq ifr = {0};
+						strncpy(ifr.ifr_name, req_text->scope_id_name, sizeof(ifr.ifr_name)-1);
+						if (ioctl(_f, SIOCGIFINDEX, &ifr)) goto close_f_fail;
+						unsigned int scope_index = ifr.ifr_ifindex;
+#endif
 						((struct sockaddr_in6 *) req_text->bind_address)->sin6_scope_id = scope_index;
 					}
 				}
