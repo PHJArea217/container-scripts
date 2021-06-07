@@ -28,6 +28,7 @@ struct mount_seq {
 			unsigned skip_source_symlink_check:1;
 			unsigned mkdir_if_not_exist:1;
 			unsigned make_file_if_not_exist:1;
+			unsigned do_remount:1;
 			char *source;
 			char *fstype;
 			char *data;
@@ -262,6 +263,12 @@ static int process_cmd(struct mount_seq *s) {
 				fprintf(stderr, "Mounting %s on %s failed: %s\n", mnt_source, s->target, strerror(errno));
 				return 1;
 			}
+			if (s->opts.mount_opts.do_remount) {
+				if (mount(NULL, s->target, NULL, s->opts.mount_opts.flags | MS_REMOUNT, NULL)) {
+					fprintf(stderr, "Remounting %s failed: %s\n", s->target, strerror(errno));
+					return 1;
+				}
+			}
 			break;
 		case MOUNT_SEQ_CMD_MKDIR:
 			if (!s->skip_target_symlink_check) {
@@ -339,7 +346,7 @@ int ctr_scripts_mount_seq_main(int argc, char **argv) {
 	int opt = 0;
 	const char *error_str = NULL;
 	char i_opt = 0;
-	while ((opt = getopt(argc, argv, "m:D:u:S:c:l:kKeyEM:s:t:O:F:o:fx")) > 0) {
+	while ((opt = getopt(argc, argv, "m:D:u:S:c:l:kKeyEM:s:t:O:F:o:fxr")) > 0) {
 		switch(opt) {
 			case 'm':
 			case 'D':
@@ -500,6 +507,19 @@ int ctr_scripts_mount_seq_main(int argc, char **argv) {
 				switch (current->cmd) {
 					case 'm':
 						current->exclusive_file = 1;
+						break;
+					default:
+						error_str = "-x may only be used with -m";
+						goto fail_all;
+				}
+				break;
+			case 'r':
+				if (!current) {
+					goto fail_no_global;
+				}
+				switch (current->cmd) {
+					case 'm':
+						current->opts.mount_opts.do_remount = 1;
 						break;
 					default:
 						error_str = "-x may only be used with -m";
