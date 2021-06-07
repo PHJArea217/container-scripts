@@ -10,7 +10,7 @@ ctrtool_arch_x86_64_syscall_r:
 ctrtool_arch_x86_64_exit:
 	endbr64
 	xor %rax, %rax
-	mov $60, %al
+	mov $231, %al
 	syscall
 x:	hlt
 	jmp x

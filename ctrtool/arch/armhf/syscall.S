@@ -16,7 +16,7 @@ test:
 # it should match the mode of the C code (thumb by default); otherwise, it may crash.
 
 ctrtool_arch_armhf_exit:
-	mov r7, #1
+	mov r7, #248
 	swi 0
 x:
 	wfi

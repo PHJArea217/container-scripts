@@ -3,7 +3,7 @@
 ctrtool_arch_x86_32_exit:
 	endbr32
 	xor %eax, %eax
-	inc %eax
+	mov $252, %al
 	mov 4(%esp), %ebx
 	int $0x80
 x:

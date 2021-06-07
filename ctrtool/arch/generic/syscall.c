@@ -13,6 +13,6 @@ long ctrtool_arch_generic_syscall(long nr, long a, long b, long c, long d, long 
 	return ret_val;
 }
 __attribute__((noreturn)) void ctrtool_arch_generic_exit(int status) {
-	syscall(SYS_exit, status, 0, 0, 0, 0, 0);
+	syscall(SYS_exit_group, status, 0, 0, 0, 0, 0);
 	while (1) ;
 }
