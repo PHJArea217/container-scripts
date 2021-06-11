@@ -11,10 +11,10 @@ case "$ARCH" in
 	x86_64)
 		ln -sf x86-64 current
 		;;
-	aarch64)
+	aarch64|arm64)
 		ln -sf aarch64 current
 		;;
-	armhf)
+	armv7l|armhf)
 		ln -sf armhf current
 		;;
 	*)

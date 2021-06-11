@@ -1,7 +1,12 @@
 CC ?= $(CROSS_COMPILE)gcc
 CCLD ?= $(CC)
 AR ?= $(CROSS_COMPILE)ar
+ARCH ?= $(shell arch)
+ifeq ($(ARCH),x86_64)
 CFLAGS ?= -O3 -g -Wall -fstack-protector-strong -fstack-clash-protection -fcf-protection=full -D_FORTIFY_SOURCE=2 -fPIC -fPIE $(CFLAGS_EXTRA)
+else
+CFLAGS ?= -O3 -g -Wall -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fPIC -fPIE $(CFLAGS_EXTRA)
+endif
 CCLDFLAGS ?= -Wl,-z,relro,-z,now -pie
 CCLDFLAGS_S ?= -Wl,-z,relro,-z,now -static-pie
 
