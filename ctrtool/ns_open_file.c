@@ -448,7 +448,7 @@ int ctr_scripts_ns_open_file_main(int argc, char **argv) {
 					}
 					current->bind_address = (struct sockaddr *) result;
 					current->bind_address_len = sizeof(struct sockaddr_in6);
-					if (scope_id_part) {
+					if (scope_id_part && !numeric_scope_id) {
 						current->scope_id_name = strdup(scope_id_part);
 						if (!current->scope_id_name) goto no_mem;
 					}
