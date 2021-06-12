@@ -307,7 +307,7 @@ int ctr_scripts_ns_open_file_main(int argc, char **argv) {
 					case 'm':
 						if (1) {
 							int c = optarg[0];
-							if ((c >= '0') && (c <= '9')) {
+							if ((c >= '0') && (c <= '7')) {
 								current->openat2_how.mode = strtoul(optarg, NULL, 8);
 							} else {
 								fprintf(stderr, "Invalid mode %s\n", optarg);
