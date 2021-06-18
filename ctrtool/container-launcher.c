@@ -911,6 +911,7 @@ invalid_propagation:
 				}
 				break;
 			case 70028:
+				do_wait = 1;
 				no_exec = 1;
 				break;
 			case 70100:
