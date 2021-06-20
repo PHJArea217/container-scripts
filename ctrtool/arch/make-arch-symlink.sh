@@ -17,6 +17,9 @@ case "$ARCH" in
 	armv7l|armhf)
 		ln -sf armhf current
 		;;
+	generic)
+		ln -sf generic current
+		;;
 	*)
 		printf 'Unknown architecture %s\n' "$ARCH"
 		exit 1
