@@ -1,4 +1,5 @@
 #include <syscall.h>
+#define CTRTOOL_IS_ARCH_GENERIC
 long ctrtool_arch_generic_syscall(long nr, long a, long b, long c, long d, long e, long f);
 __attribute__((noreturn)) void ctrtool_arch_generic_exit(int status);
 #define CTRTOOL_SYS_pidfd_open __NR_pidfd_open
