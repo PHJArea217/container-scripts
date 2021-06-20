@@ -17,6 +17,9 @@ case "$ARCH" in
 	armv7l|armhf)
 		ln -sf armhf current
 		;;
+	riscv64)
+		ln -sf riscv64 current
+		;;
 	generic)
 		ln -sf generic current
 		;;

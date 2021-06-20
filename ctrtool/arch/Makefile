@@ -10,6 +10,7 @@ clean:
 	make -C x86-64 clean
 	make -C armhf clean
 	make -C aarch64 clean
+	make -C riscv64 clean
 	make -C generic clean
 
 .PHONY: all arch clean
