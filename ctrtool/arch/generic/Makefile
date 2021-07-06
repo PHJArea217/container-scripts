@@ -1,9 +1,10 @@
 CFLAGS ?= -O3 -g -Wall -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fPIC $(CFLAGS_EXTRA)
+AR := $(CROSS_COMPILE)ar
 
 all: arch.a
 
 arch.a: syscall.o
-	ar r $@ $<
+	$(AR) r $@ $<
 
 syscall.o: syscall.c
 	$(CC) $(CFLAGS) -c -o $@ $<

@@ -1,10 +1,13 @@
+CROSS_COMPILE ?= arm-linux-gnueabihf-
+AR := $(CROSS_COMPILE)ar
+AS := $(CROSS_COMPILE)as
 all: arch.a
 
 arch.a: syscall.o
-	arm-linux-gnueabihf-ar r $@ $<
+	$(AR) r $@ $<
 
 syscall.o: syscall.S
-	arm-linux-gnueabihf-as -mthumb -o $@ $<
+	$(AS) -mthumb -o $@ $<
 
 clean:
 	rm -f syscall.o arch.a

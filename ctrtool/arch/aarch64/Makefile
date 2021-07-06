@@ -1,10 +1,13 @@
+CROSS_COMPILE ?= aarch64-linux-gnu-
+AR := $(CROSS_COMPILE)ar
+AS := $(CROSS_COMPILE)as
 all: arch.a
 
 arch.a: syscall.o
-	aarch64-linux-gnu-ar r $@ $<
+	$(AR) r $@ $<
 
 syscall.o: syscall.S
-	aarch64-linux-gnu-as -o $@ $<
+	$(AS) -o $@ $<
 
 clean:
 	rm -f syscall.o arch.a
