@@ -354,10 +354,10 @@ int ctr_scripts_ns_open_file_main(int argc, char **argv) {
 				break;
 			case 'A':
 				if (!current) goto no_opt;
-				if (current->type == 'n') {
+				if ((current->type == 'n') || (current->type == 'm')) {
 					current->anon_netns = 1;
 				} else {
-					fprintf(stderr, "-A may only be used with -n\n");
+					fprintf(stderr, "-A may only be used with -n or -m\n");
 					return 1;
 				}
 				break;
@@ -769,7 +769,9 @@ no_addr_part:
 				long syscall_result = 0;
 				if (ns_fd >= 0) {
 					if (current->anon_netns) {
-						syscall_result = ctrtool_syscall(SYS_unshare, CLONE_NEWNET, 0, 0, 0, 0, 0);
+						if (current->type == CTRTOOL_NS_OPEN_FILE_NETWORK_SOCKET) {
+							syscall_result = ctrtool_syscall(SYS_unshare, CLONE_NEWNET, 0, 0, 0, 0, 0);
+						}
 					} else {
 						syscall_result = ctrtool_syscall(SYS_setns, ns_fd, ((current->type == CTRTOOL_NS_OPEN_FILE_MOUNT) ? CLONE_NEWNS : CLONE_NEWNET), 0, 0, 0, 0);
 					}
