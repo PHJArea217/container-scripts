@@ -481,7 +481,18 @@ int ctr_scripts_ns_open_file_main(int argc, char **argv) {
 						current->file_path = optarg;
 						current->have_open_flags = 1;
 						break;
+					case 'I':
+						if (current->i_subtype == CTRTOOL_NSOF_SPECIAL_CONNECT) {
+							goto same_as_n;
+						}
+						if ((current->i_subtype & CTRTOOL_NSOF_SPECIAL_MAJOR_MASK) != CTRTOOL_NSOF_SPECIAL_MAJOR_POPEN) {
+							valid_modes = "-m, -n, -I connect, or -I popen_*";
+							goto invalid_mode;
+						}
+						current->file_path = optarg;
+						break;
 					case 'n':
+same_as_n:
 						if (current->bind_address) goto already_address;
 						size_t unix_path_len = strnlen(optarg, sizeof(((struct sockaddr_un *) 0)->sun_path)+1);
 						if (unix_path_len > sizeof(((struct sockaddr_un *) 0)->sun_path)) {
@@ -495,13 +506,6 @@ int ctr_scripts_ns_open_file_main(int argc, char **argv) {
 						if (unix_path->sun_path[0] == '@') unix_path->sun_path[0] = '\0';
 						current->bind_address = (struct sockaddr *) unix_path;
 						current->bind_address_len = unix_path_len + offsetof(struct sockaddr_un, sun_path);
-						break;
-					case 'I':
-						if ((current->i_subtype & CTRTOOL_NSOF_SPECIAL_MAJOR_MASK) != CTRTOOL_NSOF_SPECIAL_MAJOR_POPEN) {
-							valid_modes = "-m, -n, or -I popen_*";
-							goto invalid_mode;
-						}
-						current->file_path = optarg;
 						break;
 					default:
 						valid_modes = "-m, -n, or -I popen_*";
