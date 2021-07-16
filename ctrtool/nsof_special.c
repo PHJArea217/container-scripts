@@ -125,13 +125,13 @@ static int do_popen(struct ns_open_file_req *req) {
 					fprintf(stderr, "Command failed (sig = %d)\n", exit_status);
 					goto close_fail;
 				}
-				if (lseek(fd_pair[0], 0, SEEK_SET)) {
-					goto close_fail;
-				}
 				if (req->i_subtype == CTRTOOL_NSOF_SPECIAL_POPEN_MEMFD_SEAL) {
 					if (fcntl(fd_pair[0], F_ADD_SEALS, F_SEAL_SEAL | F_SEAL_WRITE | F_SEAL_GROW | F_SEAL_SHRINK)) {
 						goto close_fail;
 					}
+				}
+				if (lseek(fd_pair[0], 0, SEEK_SET)) {
+					goto close_fail;
 				}
 				break;
 			default:
