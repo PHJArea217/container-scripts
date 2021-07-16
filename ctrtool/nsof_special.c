@@ -220,6 +220,7 @@ static struct ctrtool_opt_element cred_opts[] = {
 	{.name = "pre_uid", .value = {.value = 5}},
 	{.name = "setgroups_pre", .value = {.value = 6}},
 	{.name = "uid", .value = {.value = 7}},
+	{.name = "unix_gid", .value = {.value = 9}},
 };
 int ctrtool_nsof_cmdline_creds(const char *arg, struct ns_open_file_req *req) {
 	struct ctrtool_opt_kv *res = ctrtool_options_parse_arg_kv(arg, cred_opts, sizeof(cred_opts)/sizeof(cred_opts[0]));
@@ -229,6 +230,11 @@ int ctrtool_nsof_cmdline_creds(const char *arg, struct ns_open_file_req *req) {
 	int has_error = 0;
 	uint64_t parse_result = 0;
 	switch (res->key) {
+		case 9:
+			if (req->type != CTRTOOL_NS_OPEN_FILE_NETWORK_SOCKET) {
+				errno = EINVAL;
+				goto out;
+			}
 		case 1:
 		case 4:
 		case 5:
@@ -237,23 +243,30 @@ int ctrtool_nsof_cmdline_creds(const char *arg, struct ns_open_file_req *req) {
 			if (has_error || (parse_result >= 4294967295)) {
 				goto out;
 			}
-			req->have_credential_change = 1;
 			switch (res->key) {
 				case 1:
+					req->have_credential_change = 1;
 					req->userns_gid = parse_result;
 					req->userns_have_gid = 1;
 					break;
 				case 4:
+					req->have_credential_change = 1;
 					req->pre_enter_gid = parse_result;
 					req->pre_enter_have_gid = 1;
 					break;
 				case 5:
+					req->have_credential_change = 1;
 					req->pre_enter_uid = parse_result;
 					req->pre_enter_have_uid = 1;
 					break;
 				case 7:
+					req->have_credential_change = 1;
 					req->userns_uid = parse_result;
 					req->userns_have_uid = 1;
+					break;
+				case 9:
+					req->unix_group = parse_result;
+					req->unix_set_group = 1;
 					break;
 			}
 			break;

@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <sys/stat.h>
 #include <signal.h>
 #include <sys/prctl.h>
 #include <wait.h>
@@ -204,6 +205,19 @@ static int process_req(struct ns_open_file_req *req_text, int *result_fd, const 
 				if (bind(_f, req_text->bind_address, req_text->bind_address_len)) {
 					goto close_f_fail;
 				}
+				if (req_text->sockaddr_is_unix_path) {
+					const char *sock_pathname = ((struct sockaddr_un *) req_text->bind_address)->sun_path;
+					if (req_text->unix_set_group) {
+						if (chown(sock_pathname, -1, req_text->unix_group)) {
+							goto close_f_fail;
+						}
+					}
+					if (req_text->sockaddr_has_mode) {
+						if (chmod(sock_pathname, req_text->openat2_how.mode)) {
+							goto close_f_fail;
+						}
+					}
+				}
 			}
 			if (req_text->listen_backlog) {
 				if (listen(_f, req_text->listen_backlog)) {
@@ -280,6 +294,7 @@ int ctr_scripts_ns_open_file_main(int argc, char **argv) {
 						tun_name = optarg;
 						break;
 					case 'm':
+					case 'n':
 						if (1) {
 							int c = optarg[0];
 							if ((c >= '0') && (c <= '7')) {
@@ -288,6 +303,7 @@ int ctr_scripts_ns_open_file_main(int argc, char **argv) {
 								fprintf(stderr, "Invalid mode %s\n", optarg);
 								return 1;
 							}
+							current->sockaddr_has_mode = 1;
 						}
 						break;
 				}
@@ -499,11 +515,15 @@ same_as_n:
 							fprintf(stderr, "Unix domain socket path too long\n");
 							return 1;
 						}
-						struct sockaddr_un *unix_path = calloc(sizeof(struct sockaddr_un), 1);
+						struct sockaddr_un *unix_path = calloc(sizeof(struct sockaddr_un) + 1, 1);
 						if (!unix_path) goto no_mem;
 						unix_path->sun_family = AF_UNIX;
 						memcpy(unix_path->sun_path, optarg, unix_path_len);
-						if (unix_path->sun_path[0] == '@') unix_path->sun_path[0] = '\0';
+						if (unix_path->sun_path[0] == '@') {
+							unix_path->sun_path[0] = '\0';
+						} else {
+							current->sockaddr_is_unix_path = 1;
+						}
 						current->bind_address = (struct sockaddr *) unix_path;
 						current->bind_address_len = unix_path_len + offsetof(struct sockaddr_un, sun_path);
 						break;

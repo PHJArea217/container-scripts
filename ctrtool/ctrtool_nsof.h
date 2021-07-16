@@ -72,6 +72,9 @@ struct ns_open_file_req {
 	unsigned userns_groups_pre:1;
 	unsigned userns_keepcaps:1;
 	unsigned have_credential_change:1;
+	unsigned sockaddr_is_unix_path:1;
+	unsigned sockaddr_has_mode:1;
+	unsigned unix_set_group:1;
 	const char *ns_path;
 	const char *file_path; /* or sh -c command for -I popen_* */
 	struct open_how openat2_how;
@@ -90,6 +93,7 @@ struct ns_open_file_req {
 	uint32_t userns_ngroups;
 	uid_t pre_enter_uid;
 	gid_t pre_enter_gid;
+	gid_t unix_group;
 };
 int ctrtool_nsof_process_special(struct ns_open_file_req *req, const int *register_list);
 int ctrtool_nsof_cmdline_creds(const char *arg, struct ns_open_file_req *req);
