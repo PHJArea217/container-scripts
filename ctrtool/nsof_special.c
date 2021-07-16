@@ -8,6 +8,7 @@
 #include <unistd.h>
 #include <poll.h>
 #include <errno.h>
+#include <fcntl.h>
 #define NR_REGS 8
 static int do_memfd(unsigned int actual_type) {
 	int retval = -1;
@@ -127,6 +128,11 @@ static int do_popen(struct ns_open_file_req *req) {
 				if (lseek(fd_pair[0], 0, SEEK_SET)) {
 					goto close_fail;
 				}
+				if (req->i_subtype == CTRTOOL_NSOF_SPECIAL_POPEN_MEMFD_SEAL) {
+					if (fcntl(fd_pair[0], F_ADD_SEALS, F_SEAL_SEAL | F_SEAL_WRITE | F_SEAL_GROW | F_SEAL_SHRINK)) {
+						goto close_fail;
+					}
+				}
 				break;
 			default:
 				if (fd_pair[1] >= 3) close(fd_pair[1]);
@@ -161,7 +167,7 @@ static int do_ifne_poll(int fd, int is_ifne) {
 	}
 	return 0;
 }
-int do_connect(int op_fd, struct ns_open_file_req *req) {
+static int do_connect(int op_fd, struct ns_open_file_req *req) {
 	if (!req->bind_address) {
 		errno = ENODATA;
 		return -1;
