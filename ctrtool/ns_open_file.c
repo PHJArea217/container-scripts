@@ -1,6 +1,7 @@
 #define _GNU_SOURCE
 #include "ctrtool-common.h"
 #include "ctrtool_options.h"
+#include "ctrtool_nsof.h"
 #include <syscall.h>
 #include <fcntl.h>
 #include <sys/socket.h>
@@ -21,56 +22,6 @@
 #include <netinet/tcp.h>
 #include <sys/statfs.h>
 #include <linux/magic.h>
-#ifdef CTRTOOL_CONFIG_HAVE_LINUX_OPENAT2
-#include <linux/openat2.h>
-#else
-struct open_how {
-	uint64_t flags;
-	uint64_t mode;
-	uint64_t resolve;
-};
-#define RESOLVE_NO_XDEV 1
-#define RESOLVE_NO_MAGICLINKS 2
-#define RESOLVE_NO_SYMLINKS 4
-#define RESOLVE_BENEATH 8
-#define RESOLVE_IN_ROOT 16
-#endif
-#include <sys/un.h>
-#include <stddef.h>
-#define CTRTOOL_NS_OPEN_FILE_MOUNT 'm'
-#define CTRTOOL_NS_OPEN_FILE_NETWORK_SOCKET 'n'
-#define CTRTOOL_NS_OPEN_FILE_NETWORK_TUNTAP 'T'
-#define CTRTOOL_NS_OPEN_FILE_NORMAL 'f'
-struct ns_open_file_req {
-	int type;
-	unsigned enter_userns:1;
-	unsigned anon_netns:1;
-	unsigned set_reuseaddr_or_tap:1;
-	unsigned set_reuseport_or_no_pi:1;
-	unsigned set_freebind:1;
-	unsigned set_transparent:1;
-	unsigned set_defer_accept:1;
-	unsigned set_v6only:2;
-	unsigned set_nodelay:1;
-	unsigned use_openat2:1;
-	unsigned have_open_flags:1;
-	unsigned ns_path_is_register:1;
-	unsigned store_result_in_register:1;
-	unsigned inhibit_setenv:1;
-	unsigned register_is_dirfd:1;
-	const char *ns_path;
-	const char *file_path;
-	struct open_how openat2_how;
-	int sock_domain; /* or dir fd for mount namespace */
-	int sock_type;
-	int sock_protocol;
-	int listen_backlog;
-	int ns_path_register;
-	int fd_result_register;
-	struct sockaddr *bind_address;
-	socklen_t bind_address_len;
-	char *scope_id_name;
-};
 static struct ctrtool_opt_element domain_values[] = {
 	{.name = "inet", .value = {.value = AF_INET}},
 	{.name = "inet6", .value = {.value = AF_INET6}},
@@ -132,6 +83,24 @@ static struct ctrtool_opt_element resolve_values[] = {
 	{.name = "no_magiclinks", .value = {.value = RESOLVE_NO_MAGICLINKS}},
 	{.name = "no_symlinks", .value = {.value = RESOLVE_NO_SYMLINKS}},
 	{.name = "no_xdev", .value = {.value = RESOLVE_NO_XDEV}}
+};
+static struct ctrtool_opt_element i_values[] = {
+	{.name = "connect", .value = {.value = CTRTOOL_NSOF_SPECIAL_CONNECT}},
+	{.name = "connect_unix_path", .value = {.value = CTRTOOL_NSOF_SPECIAL_CONNECT_UNIX_PATH}},
+	{.name = "ifne", .value = {.value = CTRTOOL_NSOF_SPECIAL_IFNE}},
+	{.name = "memfd", .value = {.value = CTRTOOL_NSOF_SPECIAL_MEMFD}},
+	{.name = "memfd_seal", .value = {.value = CTRTOOL_NSOF_SPECIAL_MEMFD_SEAL}},
+	{.name = "poll", .value = {.value = CTRTOOL_NSOF_SPECIAL_POLL}},
+	{.name = "popen_memfd", .value = {.value = CTRTOOL_NSOF_SPECIAL_POPEN_MEMFD}},
+	{.name = "popen_memfd_seal", .value = {.value = CTRTOOL_NSOF_SPECIAL_POPEN_MEMFD_SEAL}},
+	{.name = "popen_r", .value = {.value = CTRTOOL_NSOF_SPECIAL_POPEN_PIPE_READ}},
+	{.name = "popen_s0", .value = {.value = CTRTOOL_NSOF_SPECIAL_POPEN_SOCK_STDIN}},
+	{.name = "popen_s1", .value = {.value = CTRTOOL_NSOF_SPECIAL_POPEN_SOCK_STDOUT}},
+	{.name = "popen_su", .value = {.value = CTRTOOL_NSOF_SPECIAL_POPEN_SOCK_BOTH}},
+	{.name = "popen_w", .value = {.value = CTRTOOL_NSOF_SPECIAL_POPEN_PIPE_WRITE}},
+	{.name = "ptslave", .value = {.value = CTRTOOL_NSOF_SPECIAL_PTSLAVE}},
+	{.name = "scm_recv", .value = {.value = CTRTOOL_NSOF_SPECIAL_SCM_RIGHTS_RECV_ONE}},
+	{.name = "scm_send", .value = {.value = CTRTOOL_NSOF_SPECIAL_SCM_RIGHTS_SEND_ONE}}
 };
 #define NR_REGS 8
 static int process_req(struct ns_open_file_req *req_text, int *result_fd, const char *tun_name, const int *register_list) {
@@ -277,18 +246,24 @@ int ctr_scripts_ns_open_file_main(int argc, char **argv) {
 	int *register_list = malloc(sizeof(int) * NR_REGS);
 	ctrtool_assert(register_list);
 	memset(register_list, 255, sizeof(int) * NR_REGS);
-	while ((opt = getopt(argc, argv, "+mnTUM:N:d:t:p:l:4:6:z:fo:A2O:R:P:L:s:i:")) > 0) {
+	while ((opt = getopt(argc, argv, "+mnTUM:N:d:t:p:l:4:6:z:fo:A2O:R:P:L:s:i:I:")) > 0) {
 		char *d_optarg = NULL;
 		switch (opt) {
 			case 'm':
 			case 'n':
 			case 'T':
 			case 'f':
+			case 'I':
 				if (ctrtool_arraylist_expand_s(&things_to_add, NULL, 10, (void **) &current)) {
 					perror("ctrtool_arraylist_expand");
 					return 1;
 				}
-				current->type = opt;
+				if (opt == 'I') {
+					current->i_subtype = OPTARG_PRESET_V(i_values);
+					current->type = 'I';
+				} else {
+					current->type = opt;
+				}
 				current->sock_domain = (opt == 'm') ? AT_FDCWD : AF_INET6;
 				current->sock_type = SOCK_STREAM;
 				current->sock_protocol = 0;
@@ -347,6 +322,10 @@ int ctr_scripts_ns_open_file_main(int argc, char **argv) {
 				break;
 			case 't':
 				if (!current) goto no_opt;
+				if ((current->type == 'I') && ((current->i_subtype & 0xffff0) != 0x210)) {
+					fprintf(stderr, "-t may only be used with -n or -I popen_s[0|1|u]\n");
+					return 1;
+				}
 				current->sock_type = ctrtool_options_parse_arg_int_with_preset(optarg, type_values, sizeof(type_values)/sizeof(type_values[0]), NULL, 0);
 				break;
 			case 'p':
@@ -517,8 +496,15 @@ int ctr_scripts_ns_open_file_main(int argc, char **argv) {
 						current->bind_address = (struct sockaddr *) unix_path;
 						current->bind_address_len = unix_path_len + offsetof(struct sockaddr_un, sun_path);
 						break;
+					case 'I':
+						if ((current->i_subtype & CTRTOOL_NSOF_SPECIAL_MAJOR_MASK) != CTRTOOL_NSOF_SPECIAL_MAJOR_POPEN) {
+							valid_modes = "-m, -n, or -I popen_*";
+							goto invalid_mode;
+						}
+						current->file_path = optarg;
+						break;
 					default:
-						valid_modes = "-m or -n";
+						valid_modes = "-m, -n, or -I popen_*";
 						goto invalid_mode;
 				}
 				break;
@@ -635,6 +621,19 @@ no_addr_part:
 	for (size_t i = 0; i < things_to_add.nr; i++) {
 		current = &list_base[i];
 		int out_fd = -1;
+		if (current->type == 'I') {
+			int fd_return = ctrtool_nsof_process_special(current, register_list);
+			if (fd_return == -150) {
+				/* Operation successful, but no file descriptor was returned. */
+				continue;
+			} else if (fd_return < 0) {
+				/* FIXME: maybe a more descriptive error message */
+				perror("-I operation failed");
+				return 2;
+			}
+			out_fd = fd_return;
+			goto end_f;
+		}
 		if (current->ns_path || current->anon_netns) {
 			if (current->type == 'f') {
 				out_fd = open(current->ns_path, O_RDONLY|O_NOCTTY);
