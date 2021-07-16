@@ -4,6 +4,7 @@
 #include "ctrtool_options.h"
 #include <sys/stat.h>
 #include <sys/mman.h>
+#include <sys/un.h>
 #include <stdio.h>
 #include <wait.h>
 #include <unistd.h>
@@ -169,7 +170,25 @@ static int do_ifne_poll(int fd, int is_ifne) {
 	}
 	return 0;
 }
-static int do_connect(int op_fd, struct ns_open_file_req *req) {
+static int do_connect(int op_fd, int a_fd, struct ns_open_file_req *req) {
+	if (req->i_subtype == CTRTOOL_NSOF_SPECIAL_CONNECT_UNIX_PATH) {
+		if (a_fd < 0) {
+			errno = EBADF;
+			return -1;
+		}
+		struct sockaddr_un proc_path = {AF_UNIX, {0}};
+		if (snprintf(proc_path.sun_path, sizeof(proc_path.sun_path), "/proc/self/fd/%d", a_fd) <= 0) {
+			errno = ENOMEM;
+			return -1;
+		}
+		if (connect(op_fd, &proc_path, sizeof(proc_path))) {
+			if (errno == EINPROGRESS) {
+				return 0;
+			}
+			return -1;
+		}
+		return 0;
+	}
 	if (!req->bind_address) {
 		errno = ENODATA;
 		return -1;
@@ -211,7 +230,8 @@ int ctrtool_nsof_process_special(struct ns_open_file_req *req, const int *regist
 				case CTRTOOL_NSOF_SPECIAL_IFNE:
 					return do_ifne_poll(op_fd, 1) == 0 ? -150 : -1;
 				case CTRTOOL_NSOF_SPECIAL_CONNECT:
-					return do_connect(op_fd, req) == 0 ? -150 : -1;
+				case CTRTOOL_NSOF_SPECIAL_CONNECT_UNIX_PATH:
+					return do_connect(op_fd, a_fd, req) == 0 ? -150 : -1;
 				case CTRTOOL_NSOF_SPECIAL_SCM_RIGHTS_RECV_ONE:
 					return ctrtool_unix_scm_recv(op_fd);
 				case CTRTOOL_NSOF_SPECIAL_SCM_RIGHTS_SEND_ONE:
