@@ -246,7 +246,7 @@ int ctr_scripts_ns_open_file_main(int argc, char **argv) {
 	int *register_list = malloc(sizeof(int) * NR_REGS);
 	ctrtool_assert(register_list);
 	memset(register_list, 255, sizeof(int) * NR_REGS);
-	while ((opt = getopt(argc, argv, "+mnTUM:N:d:t:p:l:4:6:z:fo:A2O:R:P:L:s:i:I:")) > 0) {
+	while ((opt = getopt(argc, argv, "+mnTUM:N:d:t:p:l:4:6:z:fo:A2O:R:P:L:s:i:I:C:")) > 0) {
 		char *d_optarg = NULL;
 		switch (opt) {
 			case 'm':
@@ -595,6 +595,13 @@ same_as_n:
 					}
 				}
 				break;
+			case 'C':
+				if (!current) goto no_opt;
+				if (ctrtool_nsof_cmdline_creds(optarg, current)) {
+					fprintf(stderr, "Failed to parse cred option %s\n", optarg);
+					return 1;
+				}
+				break;
 			default:
 				return 1;
 		}
@@ -638,7 +645,7 @@ no_addr_part:
 			out_fd = fd_return;
 			goto end_f;
 		}
-		if (current->ns_path || current->anon_netns) {
+		if (current->ns_path || current->anon_netns || current->have_credential_change) {
 			if (current->type == 'f') {
 				out_fd = open(current->ns_path, O_RDONLY|O_NOCTTY);
 				if (out_fd < 0) {
@@ -682,67 +689,70 @@ no_addr_part:
 				perror("clone()");
 				return 2;
 			}
+#define SHMEM_BAIL() do { shared_mem_region[0] = -1; shared_mem_region[1] = errno; __sync_synchronize(); shared_mem_region[2] = 1; } while (0)
 			if (child_pid == 0) {
 				int dumpable_set = 0;
 				if (current->ns_path) {
 					if (current->enter_userns ^ current->anon_netns) { /* -A or -U, but not neither or -AU */
 						if (prctl(PR_SET_DUMPABLE, 0, 0, 0, 0)) {
-							shared_mem_region[0] = -1;
-							shared_mem_region[1] = errno;
-							__sync_synchronize();
-							shared_mem_region[2] = 1;
+							SHMEM_BAIL();
 							ctrtool_exit(255);
 						}
 						dumpable_set = 1;
 						int userns_fd = ioctl(ns_fd, NS_GET_USERNS, 0);
 						if (userns_fd < 0) {
-							shared_mem_region[0] = -1;
-							shared_mem_region[1] = errno;
-							__sync_synchronize();
-							shared_mem_region[2] = 1;
+							SHMEM_BAIL();
 							ctrtool_exit(3);
 						}
+						if (ctrtool_nsof_set_creds_pre(current)) {
+							SHMEM_BAIL();
+							ctrtool_exit(6);
+						}
 						if (setns(userns_fd, CLONE_NEWUSER)) {
-							shared_mem_region[0] = -1;
-							shared_mem_region[1] = errno;
-							__sync_synchronize();
-							shared_mem_region[2] = 1;
+							SHMEM_BAIL();
 							close(userns_fd);
 							ctrtool_exit(4);
 						}
 						close(userns_fd);
 					} else if (current->anon_netns && current->enter_userns) {
 						if (prctl(PR_SET_DUMPABLE, 0, 0, 0, 0)) {
-							shared_mem_region[0] = -1;
-							shared_mem_region[1] = errno;
-							__sync_synchronize();
-							shared_mem_region[2] = 1;
+							SHMEM_BAIL();
 							ctrtool_exit(255);
 						}
 						dumpable_set = 1;
+						if (ctrtool_nsof_set_creds_pre(current)) {
+							SHMEM_BAIL();
+							ctrtool_exit(6);
+						}
 						if (setns(ns_fd, CLONE_NEWUSER)) {
-							shared_mem_region[0] = -1;
-							shared_mem_region[1] = errno;
-							__sync_synchronize();
-							shared_mem_region[2] = 1;
+							SHMEM_BAIL();
 							ctrtool_exit(4);
 						}
+					} else {
+						if (ctrtool_nsof_set_creds_pre(current)) {
+							SHMEM_BAIL();
+							ctrtool_exit(6);
+						}
+					}
+				} else {
+					if (ctrtool_nsof_set_creds_pre(current)) {
+						SHMEM_BAIL();
+						ctrtool_exit(6);
 					}
 				}
 				if ((!dumpable_set) && (current->type == CTRTOOL_NS_OPEN_FILE_MOUNT)) {
 					if (prctl(PR_SET_DUMPABLE, 0, 0, 0, 0)) {
-						shared_mem_region[0] = -1;
-						shared_mem_region[1] = errno;
-						__sync_synchronize();
-						shared_mem_region[2] = 1;
+						SHMEM_BAIL();
 						ctrtool_exit(255);
 					}
 				}
-				long syscall_result;
-				if (current->anon_netns) {
-					syscall_result = ctrtool_syscall(SYS_unshare, CLONE_NEWNET, 0, 0, 0, 0, 0);
-				} else {
-					syscall_result = ctrtool_syscall(SYS_setns, ns_fd, ((current->type == CTRTOOL_NS_OPEN_FILE_MOUNT) ? CLONE_NEWNS : CLONE_NEWNET), 0, 0, 0, 0);
+				long syscall_result = 0;
+				if (ns_fd >= 0) {
+					if (current->anon_netns) {
+						syscall_result = ctrtool_syscall(SYS_unshare, CLONE_NEWNET, 0, 0, 0, 0, 0);
+					} else {
+						syscall_result = ctrtool_syscall(SYS_setns, ns_fd, ((current->type == CTRTOOL_NS_OPEN_FILE_MOUNT) ? CLONE_NEWNS : CLONE_NEWNET), 0, 0, 0, 0);
+					}
 				}
 				if (syscall_result < 0) {
 					shared_mem_region[0] = -1;
@@ -750,6 +760,10 @@ no_addr_part:
 					__sync_synchronize();
 					shared_mem_region[2] = 1;
 					ctrtool_exit(5);
+				}
+				if (ctrtool_nsof_set_creds_post(current)) {
+					SHMEM_BAIL();
+					ctrtool_exit(6);
 				}
 				syscall_result = process_req(current, shared_mem_region, tun_name, register_list);
 				__sync_synchronize();
@@ -785,6 +799,9 @@ no_addr_part:
 								return 2;
 							case 5:
 								perror("setns");
+								return 2;
+							case 6:
+								perror("set UID/GID/groups");
 								return 2;
 							default:
 								perror("Failed to create file descriptor");

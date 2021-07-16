@@ -1,6 +1,7 @@
 #define _GNU_SOURCE
 #include "ctrtool-common.h"
 #include "ctrtool_nsof.h"
+#include "ctrtool_options.h"
 #include <sys/stat.h>
 #include <sys/mman.h>
 #include <stdio.h>
@@ -9,6 +10,7 @@
 #include <poll.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <grp.h>
 #define NR_REGS 8
 static int do_memfd(unsigned int actual_type) {
 	int retval = -1;
@@ -208,4 +210,116 @@ int ctrtool_nsof_process_special(struct ns_open_file_req *req, const int *regist
 	}
 	errno = ENOSYS;
 	return -1;
+}
+static struct ctrtool_opt_element cred_opts[] = {
+	{.name = "gid", .value = {.value = 1}},
+	{.name = "groups", .value = {.value = 2}},
+	{.name = "keepcaps", .value = {.value = 3}},
+	{.name = "keep_groups", .value = {.value = 8}},
+	{.name = "pre_gid", .value = {.value = 4}},
+	{.name = "pre_uid", .value = {.value = 5}},
+	{.name = "setgroups_pre", .value = {.value = 6}},
+	{.name = "uid", .value = {.value = 7}},
+};
+int ctrtool_nsof_cmdline_creds(const char *arg, struct ns_open_file_req *req) {
+	struct ctrtool_opt_kv *res = ctrtool_options_parse_arg_kv(arg, cred_opts, sizeof(cred_opts)/sizeof(cred_opts[0]));
+	if (!res) {
+		return -1;
+	}
+	int has_error = 0;
+	uint64_t parse_result = 0;
+	switch (res->key) {
+		case 1:
+		case 4:
+		case 5:
+		case 7:
+			parse_result = ctrtool_options_parse_arg_int(res->value, NULL, &has_error, -1ULL);
+			if (has_error || (parse_result >= 4294967295)) {
+				goto out;
+			}
+			req->have_credential_change = 1;
+			switch (res->key) {
+				case 1:
+					req->userns_gid = parse_result;
+					req->userns_have_gid = 1;
+					break;
+				case 4:
+					req->pre_enter_gid = parse_result;
+					req->pre_enter_have_gid = 1;
+					break;
+				case 5:
+					req->pre_enter_uid = parse_result;
+					req->pre_enter_have_uid = 1;
+					break;
+				case 7:
+					req->userns_uid = parse_result;
+					req->userns_have_uid = 1;
+					break;
+			}
+			break;
+		case 2:
+			;struct iovec gid_result = {NULL, 0};
+			if (ctrtool_parse_int_array(res->value, &gid_result, sizeof(gid_t))) {
+				goto out;
+			}
+			req->userns_groups = gid_result.iov_base;
+			req->userns_ngroups = gid_result.iov_len;
+			req->userns_have_groups = 1;
+			req->have_credential_change = 1;
+			break;
+		case 3:
+			req->userns_keepcaps = 1;
+			req->have_credential_change = 1;
+			break;
+		case 6:
+			req->userns_groups_pre = 1;
+			req->have_credential_change = 1;
+			break;
+		case 8:
+			req->pre_enter_keep_groups = 1;
+			req->have_credential_change = 1;
+			break;
+		default:
+			abort();
+			break;
+	}
+	free(res);
+	return 0;
+out:
+	free(res);
+	return -1;
+}
+int ctrtool_nsof_set_creds_pre(struct ns_open_file_req *req) {
+	if (!req->pre_enter_keep_groups) {
+		if (req->userns_have_groups && req->userns_groups_pre) {
+			if (setgroups(req->userns_ngroups, req->userns_groups)) return -1;
+		} else if (req->pre_enter_have_gid || req->userns_have_gid) {
+			if (setgroups(0, NULL)) return -1;
+		}
+	}
+	if (req->pre_enter_have_gid) {
+		if (setresgid(req->pre_enter_gid, -1, -1)) return -1;
+	}
+	if (req->pre_enter_have_uid) {
+		if (setresuid(req->pre_enter_uid, -1, -1)) return -1;
+	}
+	if (ctrtool_load_permitted_caps()) return -1;
+	return 0;
+}
+int ctrtool_nsof_set_creds_post(struct ns_open_file_req *req) {
+	if (req->userns_have_groups && !req->userns_groups_pre) {
+		if (setgroups(req->userns_ngroups, req->userns_groups)) {
+			return -1;
+		}
+	}
+	if (req->userns_have_gid) {
+		if (setresgid(req->userns_gid, -1, -1)) return -1;
+	}
+	if (req->userns_have_uid) {
+		if (setresuid(req->userns_uid, -1, -1)) return -1;
+	}
+	if (req->userns_keepcaps) {
+		if (ctrtool_load_permitted_caps()) return -1;
+	}
+	return 0;
 }

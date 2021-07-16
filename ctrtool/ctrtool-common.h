@@ -41,5 +41,38 @@ int ctrtool_make_fd_nonblocking(int fd, int nonblock);
 int ctrtool_make_fd_cloexec(int fd, int cloexec);
 int ctrtool_export_fd(int fd, const char *env_name);
 int ctrtool_read_fd_env_spec(const char *arg, int print_msg, int *result);
+struct ctrtool_timens_offset_setting {
+	clockid_t clk_id;
+	struct timespec clk_offset;
+};
+struct ctrtool_cred {
+	uint32_t which;
+	uint32_t flags;
+	uint64_t effective_caps;
+	uint64_t permitted_caps;
+	uint64_t inheritable_caps;
+	uint64_t bounding_caps;
+	uint64_t ambient_caps;
+	uid_t ruid;
+	uid_t euid;
+	uid_t suid;
+	uid_t fsuid;
+	gid_t rgid;
+	gid_t egid;
+	gid_t sgid;
+	gid_t fsgid;
+	gid_t *supp_groups;
+	uint32_t nr_supp_groups;
+	struct ctrtool_timens_offset_setting *timens_offsets;
+	uint32_t nr_timens_offsets;
+	int userns_fd;
+	int mntns_fd;
+	int utsns_fd;
+	int ipcns_fd;
+	int netns_fd;
+	int pidns_fd;
+	int cgroupns_fd;
+	int timens_fd;
+};
 #define CTRTOOL_CLOSE_NO_ERROR(fd) ctrtool_syscall(SYS_close, fd, 0, 0, 0, 0, 0)
 #define ctrtool_assert(expr) do {if (expr) {} else {fprintf(stderr, "ctrtool_assert %s failed on %s:%d. Aborting.\n", #expr, __FILE__, __LINE__); abort();}} while (0)

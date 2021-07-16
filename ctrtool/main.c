@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/eventfd.h>
+#include <errno.h>
 #include "ctrtool-common.h"
 int ctr_scripts_chroot_pivot_main(int argc, char **argv);
 int ctr_scripts_container_launcher_main(int argc, char **argv);
@@ -86,6 +87,7 @@ static int search_command(const char *base_command, int argc, char **argv, int f
 	return 255;
 }
 int main(int argc, char **argv) {
+	errno = 0;
 	while (1) {
 //		int dummy_socket = socket(AF_UNIX, SOCK_STREAM|SOCK_CLOEXEC, 0);
 		int dummy_socket = eventfd(0, EFD_NONBLOCK);

@@ -68,6 +68,36 @@ static struct ctrtool_opt_element *parse_arg_enum(const char *arg, struct ctrtoo
 	}
 	return NULL;
 }
+struct ctrtool_opt_kv *ctrtool_options_parse_arg_kv(const char *arg, struct ctrtool_opt_element *values, size_t nr_values) {
+	if (!arg) {
+		return NULL;
+	}
+	const char *equal_brk = strchr(arg, '=');
+	char *key = (char *) arg;
+	if (equal_brk) {
+		key = strndup(arg, equal_brk - arg);
+		if (!key) return NULL;
+	}
+	struct ctrtool_opt_element *req_element = parse_arg_enum(key, values, nr_values, NULL, NULL, NULL);
+	if (!req_element) {
+		if (equal_brk) free(key);
+		errno = ENOENT;
+		return NULL;
+	}
+	struct ctrtool_opt_kv *result = calloc(sizeof(struct ctrtool_opt_kv), 1);
+	if (!result) {
+		if (equal_brk) free(key);
+		return NULL;
+	}
+	result->key = req_element->value.value;
+	if (equal_brk) {
+		result->value = (char *) &equal_brk[1];
+		free(key);
+	} else {
+		result->value = NULL;
+	}
+	return result;
+}
 static uint64_t parse_arg_int_with_preset(const char *arg, struct ctrtool_opt_element *values, size_t nr_values, const char *error_msg, uint64_t default_value) {
 	if (!error_msg) {
 		error_msg = "Invalid int/preset option";
