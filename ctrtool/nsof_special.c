@@ -188,10 +188,16 @@ int ctrtool_nsof_process_special(struct ns_open_file_req *req, const int *regist
 		return -1;
 	}
 	int op_fd = -1;
+	int a_fd = -1;
 	if (req->ns_path_is_register) {
 		int reg_num = req->ns_path_register;
 		ctrtool_assert(reg_num >= 0 && reg_num < NR_REGS);
 		op_fd = register_list[reg_num];
+	}
+	if (req->has_ureg1) {
+		int reg_num = req->u_reg1;
+		ctrtool_assert(reg_num >= 0 && reg_num < NR_REGS);
+		a_fd = register_list[reg_num];
 	}
 	switch (req->i_subtype & CTRTOOL_NSOF_SPECIAL_MAJOR_MASK) {
 		case CTRTOOL_NSOF_SPECIAL_MAJOR_MEMFD:
@@ -206,6 +212,10 @@ int ctrtool_nsof_process_special(struct ns_open_file_req *req, const int *regist
 					return do_ifne_poll(op_fd, 1) == 0 ? -150 : -1;
 				case CTRTOOL_NSOF_SPECIAL_CONNECT:
 					return do_connect(op_fd, req) == 0 ? -150 : -1;
+				case CTRTOOL_NSOF_SPECIAL_SCM_RIGHTS_RECV_ONE:
+					return ctrtool_unix_scm_recv(op_fd);
+				case CTRTOOL_NSOF_SPECIAL_SCM_RIGHTS_SEND_ONE:
+					return ctrtool_unix_scm_send(op_fd, a_fd) == 0 ? -150 : -1;
 			}
 	}
 	errno = ENOSYS;

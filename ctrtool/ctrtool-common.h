@@ -41,6 +41,8 @@ int ctrtool_make_fd_nonblocking(int fd, int nonblock);
 int ctrtool_make_fd_cloexec(int fd, int cloexec);
 int ctrtool_export_fd(int fd, const char *env_name);
 int ctrtool_read_fd_env_spec(const char *arg, int print_msg, int *result);
+int ctrtool_unix_scm_send(int sock_fd, int fd);
+int ctrtool_unix_scm_recv(int sock_fd);
 struct ctrtool_timens_offset_setting {
 	clockid_t clk_id;
 	struct timespec clk_offset;

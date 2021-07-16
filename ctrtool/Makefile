@@ -26,7 +26,27 @@ ctrtool: ctrtool.a arch/current/arch.a
 	@printf '  CCLD\t%s\n' $@
 	@$(CCLD) $(CCLDFLAGS) -o $@ $^
 
-ctrtool.a: chroot_pivot.o container-launcher.o cl-nsenter.o ctrtool-common.o ctrtool_options.o ctrtool_tty_proxy.o ctrtool_relay.o container-rootfs-mount.o debug_shell.o mini-init.o mount_seq.o ns_open_file.o nsof_special.o pidfd_ctl.o reset_cgroup.o set_fds.o simple-renameat2.o syslogd.o tty_proxy.o main.o
+ctrtool.a: chroot_pivot.o \
+	cl-nsenter.o \
+	container-launcher.o \
+	container-rootfs-mount.o \
+	ctrtool-common.o \
+	ctrtool_options.o \
+	ctrtool_relay.o \
+	ctrtool_tty_proxy.o \
+	ctrtool_unix_scm.o \
+	debug_shell.o \
+	mini-init.o \
+	mount_seq.o \
+	ns_open_file.o \
+	nsof_special.o \
+	pidfd_ctl.o \
+	reset_cgroup.o \
+	set_fds.o \
+	simple-renameat2.o \
+	syslogd.o \
+	tty_proxy.o \
+	main.o
 	@printf '  AR\t%s\n' $@
 	@$(AR) r $@ $^
 

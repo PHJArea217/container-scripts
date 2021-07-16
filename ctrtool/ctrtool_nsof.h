@@ -75,6 +75,8 @@ struct ns_open_file_req {
 	unsigned sockaddr_is_unix_path:1;
 	unsigned sockaddr_has_mode:1;
 	unsigned unix_set_group:1;
+	unsigned has_ureg1:1;
+	uint8_t u_reg1;
 	const char *ns_path;
 	const char *file_path; /* or sh -c command for -I popen_* */
 	struct open_how openat2_how;

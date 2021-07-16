@@ -260,7 +260,8 @@ int ctr_scripts_ns_open_file_main(int argc, char **argv) {
 	int *register_list = malloc(sizeof(int) * NR_REGS);
 	ctrtool_assert(register_list);
 	memset(register_list, 255, sizeof(int) * NR_REGS);
-	while ((opt = getopt(argc, argv, "+mnTUM:N:d:t:p:l:4:6:z:fo:A2O:R:P:L:s:i:I:C:")) > 0) {
+	int do_no_exec = 0;
+	while ((opt = getopt(argc, argv, "+mnTUM:N:d:t:p:l:4:6:z:fo:A2O:R:P:L:s:i:I:C:q")) > 0) {
 		char *d_optarg = NULL;
 		switch (opt) {
 			case 'm':
@@ -586,21 +587,19 @@ same_as_n:
 							}
 							break;
 						case 'i':
-							if (current->ns_path_is_register) {
-								fprintf(stderr, "Multiple use of -i not allowed\n");
-								return 1;
-							}
-							current->ns_path_is_register = 1;
-							current->ns_path_register = reg_num;
+							;int other_reg = -1;
 							/* 'd' to specify that it's a directory descriptor for openat(). */
 							/* 'n' to specify that it's a namespace (default) */
 							while (*arg_part) {
 								switch (*arg_part) {
 									case 'd':
-										current->register_is_dirfd = 1;
+										other_reg = -2;
 										break;
 									case 'n':
-										current->register_is_dirfd = 0;
+										other_reg = -1;
+										break;
+									case 'a':
+										other_reg = 1;
 										break;
 									default:
 										fprintf(stderr, "Invalid flag '%c' for -i\n", *arg_part);
@@ -608,8 +607,27 @@ same_as_n:
 								}
 								arg_part++;
 							}
-							if (!current->register_is_dirfd) {
-								current->ns_path = "";
+							if (other_reg < 0) {
+								if (current->ns_path_is_register) {
+									fprintf(stderr, "Multiple use of -i[fd],d and -i[fd],n not allowed\n");
+									return 1;
+								}
+								current->register_is_dirfd = (other_reg == -2) ? 1 : 0;
+								current->ns_path_is_register = 1;
+								current->ns_path_register = reg_num;
+								if (!current->register_is_dirfd) {
+									current->ns_path = "";
+								}
+							} else {
+								switch (other_reg) {
+									case 1:
+										current->u_reg1 = reg_num;
+										current->has_ureg1 = 1;
+										break;
+									default:
+										abort();
+										break;
+								}
 							}
 							break;
 					}
@@ -621,6 +639,9 @@ same_as_n:
 					fprintf(stderr, "Failed to parse cred option %s\n", optarg);
 					return 1;
 				}
+				break;
+			case 'q':
+				do_no_exec = 1;
 				break;
 			default:
 				return 1;
@@ -640,9 +661,11 @@ no_addr_part:
 		fprintf(stderr, "Invalid address specification %s, must be of the form addr,port[,flags[,scope_id]]\n", optarg);
 		return 1;
 	}
-	if (!argv[optind]) {
-		fprintf(stderr, "%s: No program specified\n", argv[0]);
-		return 1;
+	if (!do_no_exec) {
+		if (!argv[optind]) {
+			fprintf(stderr, "%s: No program specified\n", argv[0]);
+			return 1;
+		}
 	}
 	if (signal(SIGCHLD, SIG_DFL) == SIG_ERR) {
 		perror("signal()");
@@ -889,6 +912,7 @@ end_f:
 			register_list[reg_num] = out_fd;
 		}
 	}
+	if (do_no_exec) return 0;
 	execvp(argv[optind], &argv[optind]);
 	perror("execvp()");
 	return 127;
