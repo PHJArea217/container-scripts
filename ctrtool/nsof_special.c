@@ -206,7 +206,7 @@ static int do_connect(int op_fd, int a_fd, struct ns_open_file_req *req) {
 static int do_ptslave(int op_fd, struct ns_open_file_req *req) {
 	if (unlockpt(op_fd)) return -1;
 	/* FIXME: If we ever need to support non-linux systems, we should still use
-	 * ptsname or similar. */
+	 * ptsname or similar. Don't forget to grantpt()! */
 	int slave_fd = ioctl(op_fd, TIOCGPTPEER, req->openat2_how.flags);
 	if (slave_fd < 0) return -1;
 	return slave_fd;
