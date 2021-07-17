@@ -12,6 +12,8 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <grp.h>
+#include <termios.h>
+#include <sys/ioctl.h>
 #define NR_REGS 8
 static int do_memfd(unsigned int actual_type) {
 	int retval = -1;
@@ -201,6 +203,14 @@ static int do_connect(int op_fd, int a_fd, struct ns_open_file_req *req) {
 	}
 	return 0;
 }
+static int do_ptslave(int op_fd, struct ns_open_file_req *req) {
+	if (unlockpt(op_fd)) return -1;
+	/* FIXME: If we ever need to support non-linux systems, we should still use
+	 * ptsname or similar. */
+	int slave_fd = ioctl(op_fd, TIOCGPTPEER, req->openat2_how.flags);
+	if (slave_fd < 0) return -1;
+	return slave_fd;
+}
 int ctrtool_nsof_process_special(struct ns_open_file_req *req, const int *register_list) {
 	if (req->i_subtype >= 0x100000) {
 		errno = ENOSYS;
@@ -236,6 +246,8 @@ int ctrtool_nsof_process_special(struct ns_open_file_req *req, const int *regist
 					return ctrtool_unix_scm_recv(op_fd);
 				case CTRTOOL_NSOF_SPECIAL_SCM_RIGHTS_SEND_ONE:
 					return ctrtool_unix_scm_send(op_fd, a_fd) == 0 ? -150 : -1;
+				case CTRTOOL_NSOF_SPECIAL_PTSLAVE:
+					return do_ptslave(op_fd, req);
 			}
 	}
 	errno = ENOSYS;

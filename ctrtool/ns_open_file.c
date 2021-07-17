@@ -461,8 +461,13 @@ int ctr_scripts_ns_open_file_main(int argc, char **argv) {
 						current->openat2_how.flags |= OPTARG_PRESET_V(open_values);
 						current->have_open_flags = 1;
 						break;
+					case 'I':
+						if (current->i_subtype == CTRTOOL_NSOF_SPECIAL_PTSLAVE) {
+							current->openat2_how.flags |= OPTARG_PRESET_V(open_values);
+							break;
+						}
 					default:
-						valid_modes = "-m";
+						valid_modes = "-m or -I ptslave";
 						goto invalid_mode;
 				}
 				break;
