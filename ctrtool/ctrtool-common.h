@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <sys/resource.h>
 #include <stdlib.h>
+#include <syscall.h>
 #include "arch/current/arch-functions.h"
 struct ctrtool_arraylist {
 	void *start;
@@ -43,3 +44,21 @@ int ctrtool_export_fd(int fd, const char *env_name);
 int ctrtool_read_fd_env_spec(const char *arg, int print_msg, int *result);
 #define CTRTOOL_CLOSE_NO_ERROR(fd) ctrtool_syscall(SYS_close, fd, 0, 0, 0, 0, 0)
 #define ctrtool_assert(expr) do {if (expr) {} else {fprintf(stderr, "ctrtool_assert %s failed on %s:%d. Aborting.\n", #expr, __FILE__, __LINE__); abort();}} while (0)
+
+#ifdef __NR_setgroups32
+#define CTRTOOL_SYS_setgroups __NR_setgroups32
+#else
+#define CTRTOOL_SYS_setgroups __NR_setgroups
+#endif
+
+#ifdef __NR_setresuid32
+#define CTRTOOL_SYS_setresuid __NR_setresuid32
+#else
+#define CTRTOOL_SYS_setresuid __NR_setresuid
+#endif
+
+#ifdef __NR_setresgid32
+#define CTRTOOL_SYS_setresgid __NR_setresgid32
+#else
+#define CTRTOOL_SYS_setresgid __NR_setresgid
+#endif
