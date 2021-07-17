@@ -247,11 +247,11 @@ static const char *child_func(struct child_data *data, int *errno_ptr, struct ct
 	if (ctrtool_syscall_errno(SYS_capset, errno_ptr, &cap_h, (cap_user_data_t) &cap_d, 0, 0, 0, 0)) return "!capset";
 
 	/* step 5: change uid/gid with keepcaps enabled */
-	if (!data->no_setgroups && ctrtool_syscall_errno(SYS_setgroups, errno_ptr, data->supp_groups.iov_len, data->supp_groups.iov_base, 0, 0, 0, 0)) return "!setgroups";
+	if (!data->no_setgroups && ctrtool_syscall_errno(CTRTOOL_SYS_setgroups, errno_ptr, data->supp_groups.iov_len, data->supp_groups.iov_base, 0, 0, 0, 0)) return "!setgroups";
 	if (!data->no_uidgid) {
 		if ((data->set_inheritable || data->keepcaps) && ctrtool_syscall_errno(SYS_prctl, errno_ptr, PR_SET_KEEPCAPS, 1, 0, 0, 0, 0)) return "!PR_SET_KEEPCAPS";
-		if (ctrtool_syscall_errno(SYS_setresgid, errno_ptr, data->gid, data->gid, data->gid, 0, 0, 0)) return "!setgid";
-		if (ctrtool_syscall_errno(SYS_setresuid, errno_ptr, data->uid, data->uid, data->uid, 0, 0, 0)) return "!setuid";
+		if (ctrtool_syscall_errno(CTRTOOL_SYS_setresgid, errno_ptr, data->gid, data->gid, data->gid, 0, 0, 0)) return "!setgid";
+		if (ctrtool_syscall_errno(CTRTOOL_SYS_setresuid, errno_ptr, data->uid, data->uid, data->uid, 0, 0, 0)) return "!setuid";
 		/* setuid clears effective set but not permitted, try to restore those capabilities if possible */
 		if (data->set_inheritable || data->keepcaps) {
 			if (ctrtool_syscall_errno(SYS_capset, errno_ptr, &cap_h, (cap_user_data_t) &cap_d, 0, 0, 0, 0)) return "!capset";
