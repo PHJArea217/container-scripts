@@ -175,6 +175,9 @@ static int process_req(struct ns_open_file_req *req_text, int *result_fd, const 
 			if (req_text->set_defer_accept) {
 				if (setsockopt(_f, SOL_TCP, TCP_DEFER_ACCEPT, &one, sizeof(one))) goto close_f_fail;
 			}
+			if (req_text->set_banp) {
+				if (setsockopt(_f, SOL_IP, IP_BIND_ADDRESS_NO_PORT, &one, sizeof(one))) goto close_f_fail;
+			}
 			int sopt_val = 1;
 			switch (req_text->set_v6only) {
 				case 1:
@@ -408,6 +411,9 @@ int ctr_scripts_ns_open_file_main(int argc, char **argv) {
 								break;
 							case 'e':
 								current->set_nodelay = 1;
+								break;
+							case 'B':
+								current->set_banp = 1;
 								break;
 							case 'I':
 								numeric_scope_id = 1;
