@@ -57,8 +57,8 @@ int ctrtool_unix_scm_recv(int sock_fd) {
 			if ((cmsg->cmsg_level == SOL_SOCKET) && (cmsg->cmsg_type == SCM_RIGHTS)) {
 				int *fd_list = (int *) CMSG_DATA(cmsg);
 				socklen_t f_len = cmsg->cmsg_len;
-				if (f_len <= sizeof(struct cmsghdr)) continue;
-				int nr_fds = (f_len - sizeof(struct cmsghdr)) / sizeof(int);
+				if (f_len <= CMSG_LEN(0)) continue;
+				int nr_fds = (f_len - CMSG_LEN(0)) / sizeof(int);
 				if ((nr_fds < 0) || (nr_fds > 255)) continue;
 				for (int i = 0; i < nr_fds; i++) {
 					/* FIXME: In the future this function will support receiving multiple
