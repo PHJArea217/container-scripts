@@ -293,7 +293,7 @@ int ctr_scripts_ns_open_file_main(int argc, char **argv) {
 					current->type = opt;
 				}
 				current->sock_domain = (opt == 'm') ? AT_FDCWD : AF_INET6;
-				current->sock_type = SOCK_STREAM;
+				current->sock_type = (current->i_subtype == CTRTOOL_NSOF_SPECIAL_TUNSETIFF) ? 0 : SOCK_STREAM;
 				current->sock_protocol = 0;
 				current->openat2_how.mode = 0600;
 				break;
