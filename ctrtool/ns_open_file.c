@@ -23,6 +23,7 @@
 #include <netinet/tcp.h>
 #include <sys/statfs.h>
 #include <linux/magic.h>
+#include <linux/if_tun.h>
 static struct ctrtool_opt_element domain_values[] = {
 	{.name = "inet", .value = {.value = AF_INET}},
 	{.name = "inet6", .value = {.value = AF_INET6}},
@@ -101,7 +102,16 @@ static struct ctrtool_opt_element i_values[] = {
 	{.name = "popen_w", .value = {.value = CTRTOOL_NSOF_SPECIAL_POPEN_PIPE_WRITE}},
 	{.name = "ptslave", .value = {.value = CTRTOOL_NSOF_SPECIAL_PTSLAVE}},
 	{.name = "scm_recv", .value = {.value = CTRTOOL_NSOF_SPECIAL_SCM_RIGHTS_RECV_ONE}},
-	{.name = "scm_send", .value = {.value = CTRTOOL_NSOF_SPECIAL_SCM_RIGHTS_SEND_ONE}}
+	{.name = "scm_send", .value = {.value = CTRTOOL_NSOF_SPECIAL_SCM_RIGHTS_SEND_ONE}},
+	{.name = "tunsetiff", .value = {.value = CTRTOOL_NSOF_SPECIAL_TUNSETIFF}}
+};
+static struct ctrtool_opt_element tun_flags[] = {
+	{.name = "ap", .value = {.value = IFF_TAP}},
+	{.name = "multi_queue", .value = {.value = IFF_MULTI_QUEUE}},
+	{.name = "no_pi", .value = {.value = IFF_NO_PI}},
+	{.name = "tap", .value = {.value = IFF_TAP}},
+	{.name = "tun", .value = {.value = IFF_TUN}},
+	{.name = "un", .value = {.value = IFF_TUN}},
 };
 #define NR_REGS 8
 static int process_req(struct ns_open_file_req *req_text, int *result_fd, const char *tun_name, const int *register_list) {
@@ -342,9 +352,15 @@ int ctr_scripts_ns_open_file_main(int argc, char **argv) {
 				break;
 			case 't':
 				if (!current) goto no_opt;
-				if ((current->type == 'I') && ((current->i_subtype & 0xffff0) != 0x210)) {
-					fprintf(stderr, "-t may only be used with -n or -I popen_s[0|1|u]\n");
-					return 1;
+				if (current->type == 'I') {
+					if ((current->i_subtype & 0xffff0) == 0x210) {
+					} else if (current->i_subtype == CTRTOOL_NSOF_SPECIAL_TUNSETIFF) {
+						current->sock_type |= OPTARG_PRESET_V(tun_flags);
+						break;
+					} else {
+						fprintf(stderr, "-t may only be used with -n or -I popen_s[0|1|u]\n");
+						return 1;
+					}
 				}
 				current->sock_type = ctrtool_options_parse_arg_int_with_preset(optarg, type_values, sizeof(type_values)/sizeof(type_values[0]), NULL, 0);
 				break;
@@ -512,6 +528,10 @@ int ctr_scripts_ns_open_file_main(int argc, char **argv) {
 					case 'I':
 						if (current->i_subtype == CTRTOOL_NSOF_SPECIAL_CONNECT) {
 							goto same_as_n;
+						}
+						if (current->i_subtype == CTRTOOL_NSOF_SPECIAL_TUNSETIFF) {
+							current->file_path = optarg;
+							break;
 						}
 						if ((current->i_subtype & CTRTOOL_NSOF_SPECIAL_MAJOR_MASK) != CTRTOOL_NSOF_SPECIAL_MAJOR_POPEN) {
 							valid_modes = "-m, -n, -I connect, or -I popen_*";

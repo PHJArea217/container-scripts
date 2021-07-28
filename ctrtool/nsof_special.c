@@ -14,6 +14,8 @@
 #include <grp.h>
 #include <termios.h>
 #include <sys/ioctl.h>
+#include <linux/if_tun.h>
+#include <linux/if.h>
 #define NR_REGS 8
 static int do_memfd(unsigned int actual_type) {
 	int retval = -1;
@@ -211,6 +213,23 @@ static int do_ptslave(int op_fd, struct ns_open_file_req *req) {
 	if (slave_fd < 0) return -1;
 	return slave_fd;
 }
+static int do_tunsetiff(int op_fd, struct ns_open_file_req *req) {
+	const char *default_tun = "tun%d";
+	if (req->file_path) {
+		default_tun = req->file_path;
+	}
+	if (strnlen(default_tun, IFNAMSIZ) >= IFNAMSIZ) {
+		errno = ENAMETOOLONG;
+		return -1;
+	}
+	struct ifreq ifr = {};
+	strncpy(ifr.ifr_name, default_tun, sizeof(ifr.ifr_name));
+	ifr.ifr_flags = req->sock_type; /* Weird, but it allows us to reuse -t for this */
+	if (ioctl(op_fd, TUNSETIFF, &ifr)) {
+		return -1;
+	}
+	return 0;
+}
 int ctrtool_nsof_process_special(struct ns_open_file_req *req, const int *register_list) {
 	if (req->i_subtype >= 0x100000) {
 		errno = ENOSYS;
@@ -248,6 +267,8 @@ int ctrtool_nsof_process_special(struct ns_open_file_req *req, const int *regist
 					return ctrtool_unix_scm_send(op_fd, a_fd) == 0 ? -150 : -1;
 				case CTRTOOL_NSOF_SPECIAL_PTSLAVE:
 					return do_ptslave(op_fd, req);
+				case CTRTOOL_NSOF_SPECIAL_TUNSETIFF:
+					return do_tunsetiff(op_fd, req) == 0 ? -150 : -1;
 			}
 	}
 	errno = ENOSYS;
