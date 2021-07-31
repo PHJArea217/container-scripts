@@ -71,6 +71,7 @@ static int do_popen(struct ns_open_file_req *req) {
 			break;
 		case CTRTOOL_NSOF_SPECIAL_POPEN_SOCK_STDIN:
 		case CTRTOOL_NSOF_SPECIAL_POPEN_SOCK_STDOUT:
+		case CTRTOOL_NSOF_SPECIAL_POPEN_SOCK_SCM_FD:
 		case CTRTOOL_NSOF_SPECIAL_POPEN_SOCK_BOTH:
 			if (socketpair(AF_UNIX, req->sock_type, 0, fd_pair)) {
 				return -1;
@@ -100,6 +101,7 @@ static int do_popen(struct ns_open_file_req *req) {
 				}
 				break;
 			case CTRTOOL_NSOF_SPECIAL_POPEN_SOCK_STDOUT:
+			case CTRTOOL_NSOF_SPECIAL_POPEN_SOCK_SCM_FD:
 			case CTRTOOL_NSOF_SPECIAL_POPEN_PIPE_READ:
 				close(fd_pair[0]);
 			case CTRTOOL_NSOF_SPECIAL_POPEN_MEMFD:
@@ -115,6 +117,8 @@ static int do_popen(struct ns_open_file_req *req) {
 		ctrtool_exit(127);
 	} else {
 		switch (req->i_subtype) {
+			case CTRTOOL_NSOF_SPECIAL_POPEN_SOCK_SCM_FD:
+				if (fd_pair[1] >= 3) close(fd_pair[1]);
 			case CTRTOOL_NSOF_SPECIAL_POPEN_MEMFD:
 			case CTRTOOL_NSOF_SPECIAL_POPEN_MEMFD_SEAL:
 				;int w_status = 0x7f00;
@@ -131,6 +135,12 @@ static int do_popen(struct ns_open_file_req *req) {
 					int exit_status = WTERMSIG(w_status);
 					fprintf(stderr, "Command failed (sig = %d)\n", exit_status);
 					goto close_fail;
+				}
+				if (req->i_subtype == CTRTOOL_NSOF_SPECIAL_POPEN_SOCK_SCM_FD) {
+					int recv_fd = ctrtool_unix_scm_recv(fd_pair[0]);
+					if (recv_fd < 0) goto close_fail;
+					close(fd_pair[0]);
+					return recv_fd;
 				}
 				if (req->i_subtype == CTRTOOL_NSOF_SPECIAL_POPEN_MEMFD_SEAL) {
 					if (fcntl(fd_pair[0], F_ADD_SEALS, F_SEAL_SEAL | F_SEAL_WRITE | F_SEAL_GROW | F_SEAL_SHRINK)) {

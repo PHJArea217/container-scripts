@@ -98,6 +98,7 @@ static struct ctrtool_opt_element i_values[] = {
 	{.name = "popen_r", .value = {.value = CTRTOOL_NSOF_SPECIAL_POPEN_PIPE_READ}},
 	{.name = "popen_s0", .value = {.value = CTRTOOL_NSOF_SPECIAL_POPEN_SOCK_STDIN}},
 	{.name = "popen_s1", .value = {.value = CTRTOOL_NSOF_SPECIAL_POPEN_SOCK_STDOUT}},
+	{.name = "popen_scm", .value = {.value = CTRTOOL_NSOF_SPECIAL_POPEN_SOCK_SCM_FD}},
 	{.name = "popen_su", .value = {.value = CTRTOOL_NSOF_SPECIAL_POPEN_SOCK_BOTH}},
 	{.name = "popen_w", .value = {.value = CTRTOOL_NSOF_SPECIAL_POPEN_PIPE_WRITE}},
 	{.name = "ptslave", .value = {.value = CTRTOOL_NSOF_SPECIAL_PTSLAVE}},
