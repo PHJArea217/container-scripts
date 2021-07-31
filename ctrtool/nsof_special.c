@@ -119,6 +119,7 @@ static int do_popen(struct ns_open_file_req *req) {
 		switch (req->i_subtype) {
 			case CTRTOOL_NSOF_SPECIAL_POPEN_SOCK_SCM_FD:
 				if (fd_pair[1] >= 3) close(fd_pair[1]);
+				fd_pair[1] = -1;
 			case CTRTOOL_NSOF_SPECIAL_POPEN_MEMFD:
 			case CTRTOOL_NSOF_SPECIAL_POPEN_MEMFD_SEAL:
 				;int w_status = 0x7f00;
@@ -138,7 +139,10 @@ static int do_popen(struct ns_open_file_req *req) {
 				}
 				if (req->i_subtype == CTRTOOL_NSOF_SPECIAL_POPEN_SOCK_SCM_FD) {
 					int recv_fd = ctrtool_unix_scm_recv(fd_pair[0]);
-					if (recv_fd < 0) goto close_fail;
+					if (recv_fd < 0) {
+						close(fd_pair[0]);
+						return -1;
+					}
 					close(fd_pair[0]);
 					return recv_fd;
 				}
