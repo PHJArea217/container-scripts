@@ -12,7 +12,7 @@
 #include <errno.h>
 #include <poll.h>
 #include <signal.h>
-#include <wait.h>
+#include <sys/wait.h>
 #include <string.h>
 #include <stdio.h>
 int ctrtool_open_tty_proxy(struct ctrtool_tty_proxy *options) {

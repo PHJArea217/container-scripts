@@ -13,7 +13,7 @@
 #include <sys/stat.h>
 #include <signal.h>
 #include <sys/prctl.h>
-#include <wait.h>
+#include <sys/wait.h>
 #include <sys/mman.h>
 #include <sched.h>
 #include <errno.h>

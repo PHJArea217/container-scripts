@@ -5,6 +5,7 @@
 #include <sys/resource.h>
 #include <stdlib.h>
 #include <syscall.h>
+#include <asm/unistd.h>
 #include "arch/current/arch-functions.h"
 struct ctrtool_arraylist {
 	void *start;
@@ -44,6 +45,7 @@ int ctrtool_export_fd(int fd, const char *env_name);
 int ctrtool_read_fd_env_spec(const char *arg, int print_msg, int *result);
 int ctrtool_unix_scm_send(int sock_fd, int fd);
 int ctrtool_unix_scm_recv(int sock_fd);
+void *ctrtool_reallocarray(void *ptr, size_t a, size_t b);
 struct ctrtool_timens_offset_setting {
 	clockid_t clk_id;
 	struct timespec clk_offset;

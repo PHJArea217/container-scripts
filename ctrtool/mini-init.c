@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <fcntl.h>
 #include <unistd.h>
-#include <wait.h>
+#include <sys/wait.h>
 #include <sys/reboot.h>
 #include <linux/reboot.h>
 #include <stdint.h>
@@ -190,7 +190,7 @@ static int ctr_scripts_mini_init_main_c(int argc, char **argv, int new_version) 
 					return 1;
 				}
 				unsigned int nr_args_curr = all_procs->nr_args++;
-				all_procs->argv = reallocarray(all_procs->argv, sizeof(char *), all_procs->nr_args);
+				all_procs->argv = ctrtool_reallocarray(all_procs->argv, sizeof(char *), all_procs->nr_args);
 				if (!all_procs->argv) return 1;
 				all_procs->argv[nr_args_curr-1] = x_strdup(optarg);
 				all_procs->argv[nr_args_curr] = NULL;
@@ -272,7 +272,7 @@ static int ctr_scripts_mini_init_main_c(int argc, char **argv, int new_version) 
 					fputs("Cannot use -f before -n\n", stderr);
 					return 1;
 				}
-				all_procs->inherit_fds = reallocarray(all_procs->inherit_fds, sizeof(int), ++all_procs->nr_inherit_fds);
+				all_procs->inherit_fds = ctrtool_reallocarray(all_procs->inherit_fds, sizeof(int), ++all_procs->nr_inherit_fds);
 				if (!all_procs->inherit_fds) {
 					return 1;
 				}

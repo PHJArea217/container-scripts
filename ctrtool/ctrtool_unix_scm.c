@@ -3,6 +3,7 @@
 #include <sys/un.h>
 #include <errno.h>
 #include <unistd.h>
+#include <string.h>
 int ctrtool_unix_scm_send(int sock_fd, int fd) {
 	union {
 		struct cmsghdr cmsg;

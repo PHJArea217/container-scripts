@@ -6,7 +6,7 @@
 #include <sys/mman.h>
 #include <sys/un.h>
 #include <stdio.h>
-#include <wait.h>
+#include <sys/wait.h>
 #include <unistd.h>
 #include <poll.h>
 #include <errno.h>
@@ -16,6 +16,7 @@
 #include <sys/ioctl.h>
 #include <linux/if_tun.h>
 #include <linux/if.h>
+#include <string.h>
 #define NR_REGS 8
 static int do_memfd(unsigned int actual_type) {
 	int retval = -1;
@@ -199,7 +200,7 @@ static int do_connect(int op_fd, int a_fd, struct ns_open_file_req *req) {
 			errno = ENOMEM;
 			return -1;
 		}
-		if (connect(op_fd, &proc_path, sizeof(proc_path))) {
+		if (connect(op_fd, (struct sockaddr *) &proc_path, sizeof(proc_path))) {
 			if (errno == EINPROGRESS) {
 				return 0;
 			}

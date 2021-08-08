@@ -2,7 +2,7 @@
 #include <syscall.h>
 #include <stdio.h>
 #include <sys/mman.h>
-#include <wait.h>
+#include <sys/wait.h>
 #include <signal.h>
 #include <errno.h>
 #include <string.h>

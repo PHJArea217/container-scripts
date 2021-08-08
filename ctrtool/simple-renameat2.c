@@ -16,13 +16,13 @@ int ctr_scripts_simple_renameat2_main(int argc, char **argv) {
 	while ((opt = getopt(argc, argv, "xwns:d:")) > 0) {
 		switch (opt) {
 			case 'x':
-				rename_flags |= RENAME_EXCHANGE;
+				rename_flags |= 2 /* RENAME_EXCHANGE */;
 				break;
 			case 'w':
-				rename_flags |= RENAME_WHITEOUT;
+				rename_flags |= 4 /* RENAME_WHITEOUT */;
 				break;
 			case 'n':
-				rename_flags |= RENAME_NOREPLACE;
+				rename_flags |= 1 /* RENAME_NOREPLACE */;
 				break;
 			case 's':
 				if (ctrtool_read_fd_env_spec(optarg, 1, &source_fd)) {
@@ -46,7 +46,7 @@ int ctr_scripts_simple_renameat2_main(int argc, char **argv) {
 	if (!dest_filename) goto two_args_required;
 	const char *x_filename = argv[optind+2];
 	if (x_filename) goto two_args_required;
-	if (renameat2(source_fd, source_filename, target_fd, dest_filename, rename_flags)) {
+	if (ctrtool_syscall_errno(__NR_renameat2, &errno, source_fd, source_filename, target_fd, dest_filename, rename_flags, 0)) {
 		fprintf(stderr, "Move %s to %s failed: %s\n", source_filename, dest_filename, strerror(errno));
 		return 1;
 	}

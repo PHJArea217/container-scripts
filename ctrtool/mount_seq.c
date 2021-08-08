@@ -356,7 +356,7 @@ int ctr_scripts_mount_seq_main(int argc, char **argv) {
 			case 'l':
 				if (m_list_size >= m_list_max) {
 					m_list_max += 25;
-					m_list = reallocarray(m_list, m_list_max, sizeof(struct mount_seq));
+					m_list = ctrtool_reallocarray(m_list, m_list_max, sizeof(struct mount_seq));
 					if (!m_list) {
 						return 255;
 					}

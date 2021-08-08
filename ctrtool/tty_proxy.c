@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <fcntl.h>
-#include <wait.h>
+#include <sys/wait.h>
 #include <unistd.h>
 int ctr_scripts_tty_proxy_main(int argc, char **argv) {
 	ctrtool_clear_saved_argv();

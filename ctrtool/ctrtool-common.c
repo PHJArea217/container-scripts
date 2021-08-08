@@ -230,7 +230,7 @@ int ctrtool_arraylist_expand_s(struct ctrtool_arraylist *list, const void *new_e
 	size_t new_list_size = list->nr + 1;
 	if (new_list_size > list->max) {
 		size_t new_list_max = list->max + step;
-		void *new_list_head = reallocarray(list->start, list->elem_size, new_list_max);
+		void *new_list_head = ctrtool_reallocarray(list->start, list->elem_size, new_list_max);
 		if (new_list_head == NULL) return -1;
 		list->start = new_list_head;
 		list->max = new_list_max;
@@ -359,29 +359,34 @@ static int ctrtool_parse_rlimit_string(const char *value, size_t limit, rlim_t *
 	if ((limit == 0) || (value[0] == 0)) {
 		return 1;
 	}
-	char *s_d = strndupa(value, limit);
+	char *s_d = strndup(value, limit);
 	if (strcasecmp(s_d, "unlimited") == 0) {
 		*result = RLIM_INFINITY;
+		free(s_d);
 		return 0;
 	}
 	if (!isdigit(s_d[0])) {
+		free(s_d);
 		errno = EINVAL;
 		return -1;
 	}
 	errno = 0;
 	unsigned long long limit_val = strtoull(s_d, NULL, 0);
 	if (errno) {
+		free(s_d);
 		errno = ERANGE;
 		return -1;
 	}
 	if (sizeof(rlim_t) < sizeof(unsigned long long)) {
 		int s = sizeof(rlim_t) * CHAR_BIT;
 		if (limit_val >= (1ULL << s)) {
+			free(s_d);
 			errno = ERANGE;
 			return -1;
 		}
 	}
 	*result = limit_val;
+	free(s_d);
 	return 0;
 }
 struct ctrtool_rlimit_spec {
@@ -412,6 +417,9 @@ static const struct ctrtool_rlimit_spec rlimits[] = {
 	{"r", RLIMIT_RTPRIO},
 	{"rss", RLIMIT_RSS},
 	{"rtprio", RLIMIT_RTPRIO},
+#ifndef RLIMIT_RTTIME
+#define RLIMIT_RTTIME 15
+#endif
 	{"rttime", RLIMIT_RTTIME},
 	{"s", RLIMIT_STACK},
 	{"sigpending", RLIMIT_SIGPENDING},
@@ -435,10 +443,11 @@ int ctrtool_parse_rlimit(const char *spec, struct ctrtool_rlimit *result) {
 	}
 	size_t s_limit = equal_brk - spec;
 	if (s_limit > 20) s_limit = 20;
-	char *spec_s = strndupa(spec, s_limit);
+	char *spec_s = strndup(spec, s_limit);
 	struct ctrtool_rlimit_spec m_spec = {spec_s, 0};
 	struct ctrtool_rlimit_spec *rlimit_result = bsearch(&m_spec, rlimits, sizeof(rlimits)/sizeof(rlimits[0]), sizeof(rlimits[0]), compare_rlimits);
 	if (!rlimit_result) {
+		free(spec_s);
 		errno = ENOENT;
 		return -1;
 	}
@@ -447,6 +456,7 @@ int ctrtool_parse_rlimit(const char *spec, struct ctrtool_rlimit *result) {
 	if (!colon_brk) {
 		rlim_t f_result = -1;
 		if (ctrtool_parse_rlimit_string(equal_brk, 40, &f_result)) {
+			free(spec_s);
 			errno = EINVAL;
 			return -1;
 		}
@@ -460,11 +470,13 @@ int ctrtool_parse_rlimit(const char *spec, struct ctrtool_rlimit *result) {
 		rlim_t f_result_hard = -1;
 		int r_1 = ctrtool_parse_rlimit_string(equal_brk, colon_brk - equal_brk, &f_result_soft);
 		if (r_1 < 0) {
+			free(spec_s);
 			errno = EINVAL;
 			return -1;
 		}
 		int r_2 = ctrtool_parse_rlimit_string(&colon_brk[1], 40, &f_result_hard);
 		if (r_2 < 0) {
+			free(spec_s);
 			errno = EINVAL;
 			return -1;
 		}
@@ -663,4 +675,12 @@ int ctrtool_read_fd_env_spec(const char *arg, int print_msg, int *result) {
 	}
 	*result = i_result_i;
 	return 0;
+}
+void *ctrtool_reallocarray(void *ptr, size_t a, size_t b) {
+	size_t result = 0;
+	if (__builtin_mul_overflow(a, b, &result)) {
+		errno = ENOMEM;
+		return NULL;
+	}
+	return realloc(ptr, result);
 }

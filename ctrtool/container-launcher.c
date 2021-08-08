@@ -7,7 +7,7 @@
 #include <limits.h>
 #include <signal.h>
 #include <sys/file.h>
-#include <wait.h>
+#include <sys/wait.h>
 #include <sys/mount.h>
 #include <ctype.h>
 #include <grp.h>
@@ -1238,7 +1238,7 @@ invalid_propagation:
 		clone_args0.set_tid = (uint64_t) clone3_set_tid.iov_base;
 		clone_args0.set_tid_size = clone3_set_tid.iov_len;
 #endif
-		clone_result = ctrtool_raw_syscall(SYS_clone3, &clone_args0, sizeof(clone_args0), 0, 0, 0, 0);
+		clone_result = ctrtool_raw_syscall(__NR_clone3, &clone_args0, sizeof(clone_args0), 0, 0, 0, 0);
 	} else {
 		clone_result = ctrtool_clone_onearg(clone_flags|SIGCHLD);
 	}

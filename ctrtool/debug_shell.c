@@ -21,7 +21,7 @@ int ctr_scripts_debug_shell_main(int argc, char **argv) {
 	while ((opt = getopt(argc, argv, "+c:f:luE")) > 0) {
 		switch (opt) {
 			case 'c':
-				shell_command = reallocarray(shell_command, ++shell_command_len, sizeof(char *));
+				shell_command = ctrtool_reallocarray(shell_command, ++shell_command_len, sizeof(char *));
 				if (!shell_command) {
 					return 1;
 				}
@@ -47,7 +47,7 @@ int ctr_scripts_debug_shell_main(int argc, char **argv) {
 		fprintf(stderr, "%s: -c command required\n", argv[0]);
 		return 1;
 	}
-	shell_command = reallocarray(shell_command, ++shell_command_len, sizeof(char *));
+	shell_command = ctrtool_reallocarray(shell_command, ++shell_command_len, sizeof(char *));
 	if (!shell_command) {
 		return 1;
 	}

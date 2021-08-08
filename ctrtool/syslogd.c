@@ -184,7 +184,11 @@ int ctr_scripts_syslogd_main(int argc, char **argv) {
 	}
 	while (1) {
 		struct iovec m_iov = {recv_buf, 1024};
-		struct msghdr m_h = {NULL, 0, &m_iov, 1, recv_anc_buf, 480, 0};
+		struct msghdr m_h = {};
+		m_h.msg_iov = &m_iov;
+		m_h.msg_iovlen = 1;
+		m_h.msg_control = recv_anc_buf;
+		m_h.msg_controllen = 480;
 		if (prlimit(0, RLIMIT_NOFILE, &res_limits_capped, NULL)) {
 			if (prlimit(0, RLIMIT_NOFILE, NULL, &res_limits_capped)) {
 				perror("prlimit");

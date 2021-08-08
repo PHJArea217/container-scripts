@@ -93,7 +93,7 @@ int ctr_scripts_set_fds_main(int argc, char **argv) {
 			list_s++;
 			if (list_s > list_m) {
 				list_m += 25;
-				fd_list_b = reallocarray(fd_list_b, list_m, sizeof(int));
+				fd_list_b = ctrtool_reallocarray(fd_list_b, list_m, sizeof(int));
 				if (fd_list_b == NULL) return 1;
 			}
 			fd_list_b[list_s-1] = env_name ? env_num : atoi(s);

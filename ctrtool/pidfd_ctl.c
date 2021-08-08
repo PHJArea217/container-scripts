@@ -15,6 +15,7 @@
 #include <linux/nsfs.h>
 #include <sys/vfs.h>
 #include <linux/magic.h>
+#include <asm-generic/unistd.h>
 #include "ctrtool-common.h"
 static int ensure_fd_fs(int fd, unsigned int fs_type) {
 	struct statfs stat_buf;
@@ -135,7 +136,7 @@ int ctr_scripts_pidfd_ctl_main(int argc, char **argv) {
 				clone3_args.flags = CLONE_PIDFD;
 				clone3_args.pidfd = (uint64_t) &pid_fd_i;
 				clone3_args.exit_signal = SIGCHLD;
-				long result = ctrtool_raw_syscall(SYS_clone3, &clone3_args, sizeof(clone3_args), 0, 0, 0, 0);
+				long result = ctrtool_raw_syscall(__NR_clone3, &clone3_args, sizeof(clone3_args), 0, 0, 0, 0);
 				if (result < 0) {
 					fprintf(stderr, "clone() failed: %s\n", strerror(-result));
 					return 255;
