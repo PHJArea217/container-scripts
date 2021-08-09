@@ -1,5 +1,6 @@
 #define _GNU_SOURCE
 #include "ctrtool-common.h"
+#include "ctrtool_options.h"
 #include <linux/filter.h>
 #include <linux/seccomp.h>
 #include <linux/capability.h>
@@ -19,6 +20,7 @@
 #include <sys/stat.h>
 #include <sys/sendfile.h>
 #include <assert.h>
+#include <signal.h>
 int ctrtool_int32_to_num(uint32_t num, char *result) {
 	static char digits[] = "0123456789";
 	result[9] = digits[num % 10];
@@ -567,6 +569,86 @@ close_fail:
 	close(exe_fd);
 	close(memfd_fd);
 	return -1;
+}
+static struct ctrtool_opt_element signal_values[] = {
+	{.name = "abrt", .value = {.value = SIGABRT}},
+	{.name = "alrm", .value = {.value = SIGALRM}},
+	{.name = "bus", .value = {.value = SIGBUS}},
+	{.name = "chld", .value = {.value = SIGCHLD}},
+	{.name = "cont", .value = {.value = SIGCONT}},
+#ifdef SIGEMT
+	{.name = "emt", .value = {.value = SIGEMT}},
+#endif
+	{.name = "fpe", .value = {.value = SIGFPE}},
+	{.name = "hup", .value = {.value = SIGHUP}},
+	{.name = "ill", .value = {.value = SIGILL}},
+	{.name = "int", .value = {.value = SIGINT}},
+	{.name = "io", .value = {.value = SIGIO}},
+	{.name = "iot", .value = {.value = SIGIOT}},
+	{.name = "kill", .value = {.value = SIGKILL}},
+	{.name = "pipe", .value = {.value = SIGPIPE}},
+	{.name = "prof", .value = {.value = SIGPROF}},
+	{.name = "pwr", .value = {.value = SIGPWR}},
+	{.name = "quit", .value = {.value = SIGQUIT}},
+	{.name = "segv", .value = {.value = SIGSEGV}},
+	{.name = "stkflt", .value = {.value = SIGSTKFLT}},
+	{.name = "stop", .value = {.value = SIGSTOP}},
+	{.name = "sys", .value = {.value = SIGSYS}},
+	{.name = "term", .value = {.value = SIGTERM}},
+	{.name = "trap", .value = {.value = SIGTRAP}},
+	{.name = "tstp", .value = {.value = SIGTSTP}},
+	{.name = "ttin", .value = {.value = SIGTTIN}},
+	{.name = "ttou", .value = {.value = SIGTTOU}},
+	{.name = "urg", .value = {.value = SIGURG}},
+	{.name = "usr1", .value = {.value = SIGUSR1}},
+	{.name = "usr2", .value = {.value = SIGUSR2}},
+	{.name = "vtalrm", .value = {.value = SIGVTALRM}},
+	{.name = "winch", .value = {.value = SIGWINCH}},
+	{.name = "xcpu", .value = {.value = SIGXCPU}},
+	{.name = "xfsz", .value = {.value = SIGXFSZ}},
+};
+int ctrtool_parse_signal(const char *signal_string) {
+	if (
+		((signal_string[0] == 'S') || (signal_string[0] == 's'))
+		&& ((signal_string[1] == 'I') || (signal_string[1] == 'i'))
+		&& ((signal_string[2] == 'G') || (signal_string[2] == 'g'))
+	   ) {
+		signal_string = &signal_string[3];
+	}
+	/* TODO: real-time signals */
+	uint64_t result = ctrtool_options_parse_arg_int_with_preset(signal_string, signal_values, sizeof(signal_values)/sizeof(signal_values[0]), NULL, 0);
+	if ((result == 0) || (result > 64)) {
+		fprintf(stderr, "Invalid signal %llu\n", (unsigned long long) result);
+		exit(1);
+	}
+	return result;
+}
+int ctrtool_setenv_num_prefix(const char *prefix, uint64_t env_name_num, const char *suffix, int64_t env_value_num) {
+	char prefix_buf[256] = {0};
+	char value_buf[30] = {0};
+	ssize_t snprintf_result;
+	if (suffix) {
+		snprintf_result = snprintf(prefix_buf, sizeof(prefix_buf), "%s%s", prefix, suffix);
+	} else {
+		snprintf_result = snprintf(prefix_buf, sizeof(prefix_buf), "%s%llu", prefix, (unsigned long long) env_name_num);
+	}
+	if (snprintf_result < 0) {
+		errno = ENOMEM;
+		return -1;
+	}
+	if (snprintf_result > 254) {
+		errno = EOVERFLOW;
+		return -1;
+	}
+	snprintf_result = snprintf(value_buf, sizeof(value_buf), "%lld", (long long) env_value_num);
+	if (snprintf_result < 0) {
+		errno = ENOMEM;
+		return -1;
+	}
+	if (setenv(prefix_buf, value_buf, 1)) {
+		return -1;
+	}
+	return 0;
 }
 int ctrtool_make_fd_nonblocking(int fd, int nonblock) {
 	int orig_fcntl = fcntl(fd, F_GETFL, 0);
