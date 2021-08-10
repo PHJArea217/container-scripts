@@ -32,6 +32,7 @@ ctrtool.a: chroot_pivot.o \
 	container-rootfs-mount.o \
 	ctrtool-common.o \
 	ctrtool_options.o \
+	ctrtool_ppid_check.o \
 	ctrtool_relay.o \
 	ctrtool_tty_proxy.o \
 	ctrtool_unix_scm.o \
@@ -41,6 +42,7 @@ ctrtool.a: chroot_pivot.o \
 	ns_open_file.o \
 	nsof_special.o \
 	pidfd_ctl.o \
+	ppid_check.o \
 	reset_cgroup.o \
 	set_fds.o \
 	simple-renameat2.o \

@@ -15,6 +15,7 @@ int ctr_scripts_mini_init2_main(int argc, char **argv);
 int ctr_scripts_mount_seq_main(int argc, char **argv);
 int ctr_scripts_ns_open_file_main(int argc, char **argv);
 int ctr_scripts_pidfd_ctl_main(int argc, char **argv);
+int ctr_scripts_ppid_check_main(int argc, char **argv);
 int ctr_scripts_reset_cgroup_main(int argc, char **argv);
 int ctr_scripts_simple_renameat2_main(int argc, char **argv);
 int ctr_scripts_debug_shell_main(int argc, char **argv);
@@ -52,6 +53,7 @@ static struct command_def command_list[] = {
 	{"mount_seq", ctr_scripts_mount_seq_main},
 	{"ns_open_file", ctr_scripts_ns_open_file_main},
 	{"pidfd_ctl", ctr_scripts_pidfd_ctl_main},
+	{"ppid_check", ctr_scripts_ppid_check_main},
 	{"renameat2", ctr_scripts_simple_renameat2_main},
 	{"reset_cgroup", ctr_scripts_reset_cgroup_main},
 	{"rootfs-mount", ctr_scripts_container_rootfs_mount_main},
@@ -121,8 +123,9 @@ default_lookup:
 	if (argc < 2) {
 		fprintf(stderr, "Usage: %s\n"
 				"\t[ escape ] [ chroot_pivot | debug_shell | init | init2 | launcher\n"
-				"\t| mount_seq | ns_open_file | pidfd_ctl | renameat2 | reset_cgroup\n"
-				"\t| rootfs-mount | set_fds | syslogd | tty_proxy ] [ARGUMENTS]\n"
+				"\t| mount_seq | ns_open_file | pidfd_ctl | ppid_check | renameat2\n"
+				"\t| reset_cgroup | rootfs-mount | set_fds | syslogd | tty_proxy ]\n"
+				"\t[ARGUMENTS]\n"
 				"\nFor more information, see https://website.peterjin.org/wiki/Help:Ctrtool\n\n", argv[0]);
 		return 255;
 	}

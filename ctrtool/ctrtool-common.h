@@ -79,6 +79,9 @@ struct ctrtool_cred {
 	int cgroupns_fd;
 	int timens_fd;
 };
+int ctrtool_parse_signal(const char *signal_string);
+int ctrtool_setenv_num_prefix(const char *prefix, uint64_t env_name_num, const char *suffix, int64_t env_value_num);
+/* TODO: ctrtool_parse_cap, ctrtool_options_parse_arg_multi, ctrtool_options_parse_arg_multi_bits */
 #define CTRTOOL_CLOSE_NO_ERROR(fd) ctrtool_syscall(SYS_close, fd, 0, 0, 0, 0, 0)
 #define ctrtool_assert(expr) do {if (expr) {} else {fprintf(stderr, "ctrtool_assert %s failed on %s:%d. Aborting.\n", #expr, __FILE__, __LINE__); abort();}} while (0)
 
